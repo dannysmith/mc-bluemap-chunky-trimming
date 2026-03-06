@@ -135,7 +135,6 @@ All code compiles and the shadow JAR builds (121KB).
 ## Build & Test
 
 ```bash
-cd bluemap-chunk-trimmer
 ./gradlew shadowJar          # builds to build/libs/bluemap-chunk-trimmer-0.1.0.jar
 ./gradlew compileJava        # compile check only
 ```
