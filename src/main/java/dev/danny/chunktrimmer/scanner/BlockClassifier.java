@@ -215,6 +215,14 @@ public class BlockClassifier {
         this.playerBlocks = playerBlocks;
     }
 
+    /** Creates a classifier with the default set plus additional block IDs. */
+    public static BlockClassifier withExtra(Set<String> extra) {
+        if (extra == null || extra.isEmpty()) return new BlockClassifier();
+        var merged = new java.util.HashSet<>(DEFAULT_PLAYER_BLOCKS);
+        merged.addAll(extra);
+        return new BlockClassifier(merged);
+    }
+
     /** Returns true if the block ID is considered a player-placed block. */
     public boolean isPlayerBlock(String blockId) {
         return playerBlocks.contains(blockId);

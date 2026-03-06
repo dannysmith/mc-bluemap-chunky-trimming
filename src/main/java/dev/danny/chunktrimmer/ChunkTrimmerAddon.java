@@ -36,7 +36,7 @@ public class ChunkTrimmerAddon implements Runnable {
 
         Config config = Config.load(configDir);
         ScanCache cache = new ScanCache(configDir);
-        BlockClassifier classifier = new BlockClassifier();
+        BlockClassifier classifier = BlockClassifier.withExtra(config.getExtraPlayerBlocks());
         OverlayManager overlays = new OverlayManager(config.getOverlayY());
         DataExporter exporter = new DataExporter();
 
