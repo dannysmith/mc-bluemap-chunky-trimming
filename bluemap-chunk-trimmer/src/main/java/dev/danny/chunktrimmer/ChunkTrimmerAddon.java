@@ -2,7 +2,9 @@ package dev.danny.chunktrimmer;
 
 import de.bluecolored.bluemap.api.BlueMapAPI;
 import de.bluecolored.bluemap.api.BlueMapWorld;
+import dev.danny.chunktrimmer.overlay.OverlayManager;
 import dev.danny.chunktrimmer.scanner.*;
+import dev.danny.chunktrimmer.web.DataExporter;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -34,12 +36,15 @@ public class ChunkTrimmerAddon implements Runnable {
         Config config = Config.load(configDir);
         ScanCache cache = new ScanCache(configDir);
         BlockClassifier classifier = new BlockClassifier();
+        OverlayManager overlays = new OverlayManager(config.getOverlayY());
+        DataExporter exporter = new DataExporter();
 
         // Load cached results immediately (fast)
         ScanResult cachedResult = cache.load();
         if (cachedResult != null) {
             logScanSummary(cachedResult);
-            // TODO: Phase 2 — create overlay markers from cached data here
+            overlays.update(api, cachedResult);
+            exporter.export(api, cachedResult);
         }
 
         // Kick off background rescan
@@ -70,8 +75,8 @@ public class ChunkTrimmerAddon implements Runnable {
                 System.out.println("[ChunkTrimmer] Background scan complete in " + elapsed + "ms");
                 logScanSummary(result);
 
-                // TODO: Phase 2 — update overlay markers with fresh data
-                // TODO: Phase 2 — write web data JSON to AssetStorage
+                overlays.update(api, result);
+                exporter.export(api, result);
 
             } catch (IOException e) {
                 System.err.println("[ChunkTrimmer] Scan failed: " + e.getMessage());
