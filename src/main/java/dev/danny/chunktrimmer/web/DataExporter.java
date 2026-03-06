@@ -1,44 +1,35 @@
 package dev.danny.chunktrimmer.web;
 
-import com.google.gson.JsonObject;
-import de.bluecolored.bluemap.api.AssetStorage;
 import de.bluecolored.bluemap.api.BlueMapAPI;
-import de.bluecolored.bluemap.api.BlueMapMap;
 import dev.danny.chunktrimmer.scanner.ChunkAnalysis;
 import dev.danny.chunktrimmer.scanner.ScanResult;
 
 import java.io.IOException;
-import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 /**
- * Writes compact scan data JSON to BlueMap's AssetStorage for the web addon to fetch.
+ * Writes compact scan data JSON to BlueMap's web root for the web addon to fetch.
  */
 public class DataExporter {
 
-    private static final String ASSET_NAME = "chunk-trimmer-data.json";
+    private static final String DATA_PATH = "assets/chunk-trimmer/data.json";
 
     /**
-     * Writes scan results to every map's AssetStorage.
+     * Writes scan results to the web root so the web addon can fetch it.
      */
     public void export(BlueMapAPI api, ScanResult result) {
-        String json = buildJson(result);
-        byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
+        Path target = api.getWebApp().getWebRoot().resolve(DATA_PATH);
 
-        int mapCount = 0;
-        for (BlueMapMap map : api.getMaps()) {
-            AssetStorage storage = map.getAssetStorage();
-            try (OutputStream out = storage.writeAsset(ASSET_NAME)) {
-                out.write(bytes);
-                mapCount++;
-            } catch (IOException e) {
-                System.err.println("[ChunkTrimmer] Failed to write data to map "
-                        + map.getName() + ": " + e.getMessage());
-            }
+        try {
+            Files.createDirectories(target.getParent());
+            byte[] bytes = buildJson(result).getBytes(StandardCharsets.UTF_8);
+            Files.write(target, bytes);
+            System.out.println("[ChunkTrimmer] Exported scan data (" + bytes.length + " bytes)");
+        } catch (IOException e) {
+            System.err.println("[ChunkTrimmer] Failed to export scan data: " + e.getMessage());
         }
-
-        System.out.println("[ChunkTrimmer] Exported scan data to " + mapCount + " map(s) ("
-                + bytes.length + " bytes)");
     }
 
     /**

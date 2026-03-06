@@ -98,7 +98,7 @@ All code compiles and the shadow JAR builds (121KB).
 
 **Where to plug in:** `ChunkTrimmerAddon.java` has two `TODO` comments marking where overlay code goes — one after loading cached data (instant overlays) and one after the background rescan completes (refresh overlays).
 
-### Phase 3: Web Addon — Interactive Selection — TODO
+### Phase 3: Web Addon — Interactive Selection — DONE
 
 **3.1 Register scripts**
 - Java addon copies `chunk-trimmer.js` and `chunk-trimmer.css` from JAR resources to web root
@@ -127,10 +127,12 @@ All code compiles and the shadow JAR builds (121KB).
 - Format: `{ "world": "world", "chunks": [[x,z], [x,z], ...] }`
 - Loaded on page load, saved on every selection change
 
-### Phase 4: Export — TODO
+### Phase 4: Export — DONE (included in Phase 3)
 
 **4.1 JSON export** — Client-side download via Blob + URL.createObjectURL
 **4.2 CSV export** — Simple `chunkX,chunkZ` per line (MCA Selector compatible)
+
+Both export buttons are in the web addon panel.
 
 ## Build & Test
 

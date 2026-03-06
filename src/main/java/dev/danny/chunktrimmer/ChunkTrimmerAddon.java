@@ -5,6 +5,7 @@ import de.bluecolored.bluemap.api.BlueMapWorld;
 import dev.danny.chunktrimmer.overlay.OverlayManager;
 import dev.danny.chunktrimmer.scanner.*;
 import dev.danny.chunktrimmer.web.DataExporter;
+import dev.danny.chunktrimmer.web.WebAddonInstaller;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -38,6 +39,9 @@ public class ChunkTrimmerAddon implements Runnable {
         BlockClassifier classifier = new BlockClassifier();
         OverlayManager overlays = new OverlayManager(config.getOverlayY());
         DataExporter exporter = new DataExporter();
+
+        // Install web addon (JS/CSS)
+        WebAddonInstaller.install(api);
 
         // Load cached results immediately (fast)
         ScanResult cachedResult = cache.load();
