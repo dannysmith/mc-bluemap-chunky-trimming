@@ -1,0 +1,39 @@
+plugins {
+    id 'java'
+    id 'com.gradleup.shadow' version '9.0.0-beta4'
+}
+
+group = 'dev.danny'
+version = '0.1.0'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+repositories {
+    mavenCentral()
+    maven {
+        url 'https://repo.bluecolored.de/releases'
+        metadataSources {
+            mavenPom()
+            artifact()
+        }
+    }
+    maven { url 'https://jitpack.io' }
+}
+
+dependencies {
+    compileOnly 'de.bluecolored:bluemap-api:2.7.7'
+    implementation 'com.github.Querz:NBT:6.1'
+    compileOnly 'com.google.code.gson:gson:2.10.1'
+}
+
+shadowJar {
+    archiveClassifier.set('')
+    relocate 'net.querz', 'dev.danny.chunktrimmer.lib.querz'
+}
+
+tasks.named('build') {
+    dependsOn shadowJar
+}

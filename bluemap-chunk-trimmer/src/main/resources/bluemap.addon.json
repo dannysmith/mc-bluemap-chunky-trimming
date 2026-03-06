@@ -1,0 +1,5 @@
+{
+  "id": "chunk-trimmer",
+  "version": "0.1.0",
+  "entrypoint": "dev.danny.chunktrimmer.ChunkTrimmerAddon"
+}
