@@ -66,3 +66,38 @@
 .ct-buttons button:hover {
     background: rgba(255, 255, 255, 0.2);
 }
+
+/* Inhabited time HUD — bottom-left, updates on hover */
+.ct-hud {
+    position: fixed;
+    bottom: 60px;
+    left: 10px;
+    background: rgba(20, 20, 30, 0.85);
+    backdrop-filter: blur(6px);
+    color: #e0e0e0;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-family: sans-serif;
+    font-size: 13px;
+    z-index: 10001;
+    pointer-events: none;
+    display: none;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+}
+
+.ct-hud-label {
+    font-size: 11px;
+    color: #999;
+    margin-bottom: 2px;
+}
+
+.ct-hud-value {
+    font-weight: 600;
+    color: #fff;
+}
+
+.ct-hud-ticks {
+    font-size: 11px;
+    color: #999;
+    margin-top: 1px;
+}

@@ -25,6 +25,8 @@
     const selectionMeshes = new Map(); // "x,z" -> Mesh
     let selectionGroup = null;
     let overlayEl = null;
+    let hudEl = null;
+    let lastHoverKey = null;
 
     // ── Constants ──────────────────────────────────────────────
 
@@ -60,6 +62,7 @@
     function init() {
         createUI();
         createOverlay();
+        createHud();
         loadSelection();
         fetchScanData();
     }
@@ -191,6 +194,79 @@
             ? intersection
             : null;
     }
+
+    // ── Inhabited Time HUD ────────────────────────────────────
+
+    function createHud() {
+        hudEl = document.createElement("div");
+        hudEl.className = "ct-hud";
+        document.body.appendChild(hudEl);
+
+        document.addEventListener("mousemove", onHoverMove);
+    }
+
+    function onHoverMove(e) {
+        if (!scanData || !hudEl) {
+            hideHud();
+            return;
+        }
+
+        // Check if mouse is over the canvas
+        const canvas = app.mapViewer.renderer.domElement;
+        const rect = canvas.getBoundingClientRect();
+        if (e.clientX < rect.left || e.clientX > rect.right ||
+            e.clientY < rect.top || e.clientY > rect.bottom) {
+            hideHud();
+            return;
+        }
+
+        const pos = worldPosFromMouse(e);
+        if (!pos) {
+            hideHud();
+            return;
+        }
+
+        const chunkX = Math.floor(pos.x / CHUNK_SIZE);
+        const chunkZ = Math.floor(pos.z / CHUNK_SIZE);
+        const key = chunkX + "," + chunkZ;
+
+        if (key === lastHoverKey) return;
+        lastHoverKey = key;
+
+        const chunk = scanData.chunks[key];
+        if (!chunk || !chunk.it) {
+            hideHud();
+            return;
+        }
+
+        hudEl.innerHTML =
+            '<div class="ct-hud-label">Chunk ' + chunkX + ', ' + chunkZ + '</div>' +
+            '<div class="ct-hud-value">' + formatInhabitedTime(chunk.it) + '</div>' +
+            '<div class="ct-hud-ticks">' + chunk.it.toLocaleString() + ' ticks</div>';
+        hudEl.style.display = "block";
+    }
+
+    function hideHud() {
+        if (hudEl) hudEl.style.display = "none";
+        lastHoverKey = null;
+    }
+
+    function formatInhabitedTime(ticks) {
+        var totalSeconds = Math.floor(ticks / 20);
+        if (totalSeconds < 60) {
+            return totalSeconds + "s";
+        }
+        var minutes = Math.floor(totalSeconds / 60);
+        var seconds = totalSeconds % 60;
+        if (minutes < 60) {
+            return minutes + "m " + seconds + "s";
+        }
+        var hours = Math.floor(minutes / 60);
+        var remainMins = minutes % 60;
+        return hours + "h " + remainMins + "m";
+    }
+
+    // ── Chunk Selection ─────────────────────────────────────────
 
     function toggleChunk(key, chunkX, chunkZ) {
         if (selection.has(key)) {
