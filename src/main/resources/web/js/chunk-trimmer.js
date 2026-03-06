@@ -17,7 +17,6 @@
 
     let active = false;
     let scanData = null;
-    let modifierHeld = false;
 
     // Selection: Set of "x,z" strings
     let selection = new Set();
@@ -59,7 +58,6 @@
 
     function init() {
         createUI();
-        trackModifierKeys();
         listenForClicks();
         loadSelection();
         fetchScanData();
@@ -96,37 +94,80 @@
             });
     }
 
-    // ── Modifier Key Tracking ──────────────────────────────────
-
-    function trackModifierKeys() {
-        document.addEventListener("keydown", (e) => {
-            if (e.ctrlKey || e.metaKey) modifierHeld = true;
-        });
-        document.addEventListener("keyup", (e) => {
-            if (!e.ctrlKey && !e.metaKey) modifierHeld = false;
-        });
-        // Reset on blur (user switches window while holding modifier)
-        window.addEventListener("blur", () => {
-            modifierHeld = false;
-        });
-    }
-
     // ── Click Handling ─────────────────────────────────────────
 
+    // Ground plane for raycasting (Y = OVERLAY_Y, normal pointing up)
+    const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -OVERLAY_Y);
+
     function listenForClicks() {
-        app.events.addEventListener("bluemapMapInteraction", (evt) => {
-            if (!active || !modifierHeld) return;
+        let downPos = null;
 
-            const hit = evt.detail.hiresHit || evt.detail.hit;
-            if (!hit) return;
+        // Track pointer-down position for drag detection.
+        // Document-level capture fires before any element handlers.
+        document.addEventListener("pointerdown", (e) => {
+            downPos = { x: e.clientX, y: e.clientY };
+        }, { capture: true });
 
-            const pos = hit.point;
+        // Intercept pointer-up at document level in capture phase.
+        // This fires BEFORE BlueMap's element-level handlers that process
+        // marker clicks/popups, so we can steal the event.
+        document.addEventListener("pointerup", (e) => {
+            if (!active) return;
+            if (!e.ctrlKey && !e.metaKey) return;
+
+            // Check click is within the map canvas
+            const canvas = app.mapViewer.renderer.domElement;
+            const rect = canvas.getBoundingClientRect();
+            if (e.clientX < rect.left || e.clientX > rect.right ||
+                e.clientY < rect.top || e.clientY > rect.bottom) return;
+
+            // Ignore drags (> 5px movement)
+            if (downPos) {
+                const dx = e.clientX - downPos.x;
+                const dy = e.clientY - downPos.y;
+                if (Math.sqrt(dx * dx + dy * dy) > 5) return;
+            }
+
+            // Stop BlueMap from processing this as a marker click
+            e.stopImmediatePropagation();
+            e.preventDefault();
+
+            // Raycast from camera through mouse position to ground plane
+            const pos = worldPosFromMouse(e);
+            if (!pos) return;
+
             const chunkX = Math.floor(pos.x / CHUNK_SIZE);
             const chunkZ = Math.floor(pos.z / CHUNK_SIZE);
-            const key = chunkX + "," + chunkZ;
+            toggleChunk(chunkX + "," + chunkZ, chunkX, chunkZ);
+        }, { capture: true });
 
-            toggleChunk(key, chunkX, chunkZ);
-        });
+        // Also suppress the click event to prevent any residual handlers
+        document.addEventListener("click", (e) => {
+            if (!active) return;
+            if (!e.ctrlKey && !e.metaKey) return;
+            const canvas = app.mapViewer.renderer.domElement;
+            const rect = canvas.getBoundingClientRect();
+            if (e.clientX >= rect.left && e.clientX <= rect.right &&
+                e.clientY >= rect.top && e.clientY <= rect.bottom) {
+                e.stopImmediatePropagation();
+                e.preventDefault();
+            }
+        }, { capture: true });
+    }
+
+    function worldPosFromMouse(e) {
+        const canvas = app.mapViewer.renderer.domElement;
+        const rect = canvas.getBoundingClientRect();
+        const mouse = new THREE.Vector2(
+            ((e.clientX - rect.left) / rect.width) * 2 - 1,
+            -((e.clientY - rect.top) / rect.height) * 2 + 1
+        );
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(mouse, app.mapViewer.camera);
+        const intersection = new THREE.Vector3();
+        return raycaster.ray.intersectPlane(groundPlane, intersection)
+            ? intersection
+            : null;
     }
 
     function toggleChunk(key, chunkX, chunkZ) {
