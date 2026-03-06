@@ -19,8 +19,6 @@ public class OverlayManager {
 
     private static final String HEATMAP_SET_ID = "chunk-trimmer-heatmap";
     private static final String MODIFIED_SET_ID = "chunk-trimmer-modified";
-    private static final String SELECTION_SET_ID = "chunk-trimmer-selection";
-
     private final float overlayY;
 
     public OverlayManager(float overlayY) {
@@ -80,18 +78,10 @@ public class OverlayManager {
             }
         }
 
-        // Selection set is always created (empty) — web addon populates it
-        MarkerSet selectionSet = MarkerSet.builder()
-                .label("Selected for Trimming")
-                .toggleable(true)
-                .defaultHidden(false)
-                .build();
-
         // Apply to all maps
         for (BlueMapMap map : api.getMaps()) {
             map.getMarkerSets().put(HEATMAP_SET_ID, heatmapSet);
             map.getMarkerSets().put(MODIFIED_SET_ID, modifiedSet);
-            map.getMarkerSets().put(SELECTION_SET_ID, selectionSet);
         }
 
         System.out.println("[ChunkTrimmer] Overlays updated: "

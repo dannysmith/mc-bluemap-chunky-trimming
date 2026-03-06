@@ -135,9 +135,10 @@
 
     function ensureSelectionGroup() {
         if (selectionGroup) return;
-        selectionGroup = new BlueMap.MarkerSet("chunk-trimmer-web-selection");
-        selectionGroup.data.toggleable = false;
-        selectionGroup.data.label = "Chunk Selection (interactive)";
+        // Use a plain THREE.Group — not a BlueMap.MarkerSet.
+        // MarkerSets get tracked and wiped by BlueMap's periodic marker refresh.
+        // A plain Group added to the scene is invisible to the reconciliation logic.
+        selectionGroup = new THREE.Group();
         app.mapViewer.markers.add(selectionGroup);
     }
 
@@ -171,12 +172,17 @@
         }
     }
 
-    function rebuildAllMeshes() {
-        // Clear existing
+    function clearSelectionMeshes() {
         if (selectionGroup) {
-            selectionGroup.clear();
+            while (selectionGroup.children.length > 0) {
+                selectionGroup.remove(selectionGroup.children[0]);
+            }
         }
         selectionMeshes.clear();
+    }
+
+    function rebuildAllMeshes() {
+        clearSelectionMeshes();
 
         // Rebuild from selection
         for (const key of selection) {
@@ -283,8 +289,7 @@
                 rebuildAllMeshes();
                 updatePanel();
             } else if (selectionGroup) {
-                selectionGroup.clear();
-                selectionMeshes.clear();
+                clearSelectionMeshes();
             }
         });
 
@@ -326,10 +331,7 @@
 
         panelEl.querySelector("#ct-clear").addEventListener("click", () => {
             selection.clear();
-            if (selectionGroup) {
-                selectionGroup.clear();
-                selectionMeshes.clear();
-            }
+            clearSelectionMeshes();
             saveSelection();
             updatePanel();
         });
