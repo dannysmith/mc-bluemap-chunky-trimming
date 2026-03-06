@@ -5,19 +5,19 @@ import com.google.gson.reflect.TypeToken;
 
 import java.io.*;
 import java.lang.reflect.Type;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Persists scan results to JSON for fast reload without re-scanning.
+ * Stores one cache file per world: scan-cache-{worldId}.json
  */
 public class ScanCache {
 
-    private static final String CACHE_FILE = "scan-cache.json";
+    private static final String CACHE_PREFIX = "scan-cache-";
+    private static final String CACHE_SUFFIX = ".json";
     private static final Gson GSON = new GsonBuilder()
             .registerTypeAdapter(ChunkAnalysis.class, new ChunkAnalysisAdapter())
             .create();
@@ -28,32 +28,39 @@ public class ScanCache {
         this.cacheDir = cacheDir;
     }
 
-    public ScanResult load() {
-        Path cacheFile = cacheDir.resolve(CACHE_FILE);
-        if (!Files.exists(cacheFile)) return null;
+    /**
+     * Loads all cached scan results, keyed by world ID.
+     */
+    public Map<String, ScanResult> loadAll() {
+        Map<String, ScanResult> results = new HashMap<>();
+        if (!Files.isDirectory(cacheDir)) return results;
 
-        try (Reader reader = Files.newBufferedReader(cacheFile)) {
-            JsonObject root = JsonParser.parseReader(reader).getAsJsonObject();
-
-            String worldName = root.get("worldName").getAsString();
-            long scanTimestamp = root.get("scanTimestamp").getAsLong();
-
-            Type mapType = new TypeToken<Map<String, ChunkAnalysis>>() {}.getType();
-            Map<String, ChunkAnalysis> chunks = GSON.fromJson(root.get("chunks"), mapType);
-            if (chunks == null) chunks = new HashMap<>();
-
-            System.out.println("[ChunkTrimmer] Loaded cached scan: " + chunks.size() + " chunks");
-            return new ScanResult(worldName, scanTimestamp, chunks);
-        } catch (Exception e) {
-            System.err.println("[ChunkTrimmer] Warning: Failed to load scan cache: " + e.getMessage());
-            return null;
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(cacheDir, CACHE_PREFIX + "*" + CACHE_SUFFIX)) {
+            for (Path file : stream) {
+                String filename = file.getFileName().toString();
+                String worldId = filename.substring(CACHE_PREFIX.length(), filename.length() - CACHE_SUFFIX.length());
+                ScanResult result = loadFile(file);
+                if (result != null) {
+                    results.put(worldId, result);
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("[ChunkTrimmer] Warning: Failed to scan cache directory: " + e.getMessage());
         }
+
+        if (!results.isEmpty()) {
+            System.out.println("[ChunkTrimmer] Loaded cached scans for " + results.size() + " world(s)");
+        }
+        return results;
     }
 
-    public void save(ScanResult result) {
+    /**
+     * Saves a scan result for a specific world.
+     */
+    public void save(String worldId, ScanResult result) {
         try {
             Files.createDirectories(cacheDir);
-            Path cacheFile = cacheDir.resolve(CACHE_FILE);
+            Path cacheFile = cacheDir.resolve(CACHE_PREFIX + worldId + CACHE_SUFFIX);
 
             JsonObject root = new JsonObject();
             root.addProperty("worldName", result.worldName());
@@ -64,9 +71,29 @@ public class ScanCache {
                 GSON.toJson(root, writer);
             }
 
-            System.out.println("[ChunkTrimmer] Saved scan cache: " + result.totalChunks() + " chunks");
+            System.out.println("[ChunkTrimmer] Saved cache for world '" + worldId + "': " +
+                    result.totalChunks() + " chunks");
         } catch (IOException e) {
-            System.err.println("[ChunkTrimmer] Warning: Failed to save scan cache: " + e.getMessage());
+            System.err.println("[ChunkTrimmer] Warning: Failed to save scan cache for " + worldId + ": " + e.getMessage());
+        }
+    }
+
+    private ScanResult loadFile(Path cacheFile) {
+        try (Reader reader = Files.newBufferedReader(cacheFile)) {
+            JsonObject root = JsonParser.parseReader(reader).getAsJsonObject();
+
+            String worldName = root.get("worldName").getAsString();
+            long scanTimestamp = root.get("scanTimestamp").getAsLong();
+
+            Type mapType = new TypeToken<Map<String, ChunkAnalysis>>() {}.getType();
+            Map<String, ChunkAnalysis> chunks = GSON.fromJson(root.get("chunks"), mapType);
+            if (chunks == null) chunks = new HashMap<>();
+
+            return new ScanResult(worldName, scanTimestamp, chunks);
+        } catch (Exception e) {
+            System.err.println("[ChunkTrimmer] Warning: Failed to load cache file " +
+                    cacheFile.getFileName() + ": " + e.getMessage());
+            return null;
         }
     }
 

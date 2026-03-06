@@ -10,11 +10,12 @@ import dev.danny.chunktrimmer.web.WebAddonInstaller;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
  * BlueMap native addon entrypoint.
- * Scans Minecraft region files and creates chunk analysis overlays.
+ * Scans Minecraft region files for all worlds and creates per-dimension chunk analysis overlays.
  */
 public class ChunkTrimmerAddon implements Runnable {
 
@@ -29,8 +30,6 @@ public class ChunkTrimmerAddon implements Runnable {
     private void onEnable(BlueMapAPI api) {
         System.out.println("[ChunkTrimmer] Addon enabled");
 
-        // Resolve config directory alongside the addon in BlueMap's config area
-        // Use the web root's parent as a base — typically <server>/bluemap/
         Path blueMapRoot = api.getWebApp().getWebRoot().getParent();
         Path configDir = blueMapRoot.resolve("addons").resolve(ADDON_ID);
 
@@ -43,44 +42,60 @@ public class ChunkTrimmerAddon implements Runnable {
         // Install web addon (JS/CSS)
         WebAddonInstaller.install(api);
 
-        // Load cached results immediately (fast)
-        ScanResult cachedResult = cache.load();
-        if (cachedResult != null) {
-            logScanSummary(cachedResult);
-            overlays.update(api, cachedResult);
-            exporter.export(api, cachedResult);
+        // Load cached results immediately (fast) — maps world IDs back to BlueMapWorlds
+        Map<String, ScanResult> cachedByKey = cache.loadAll();
+        if (!cachedByKey.isEmpty()) {
+            Map<BlueMapWorld, ScanResult> cached = resolveWorlds(api, cachedByKey);
+            if (!cached.isEmpty()) {
+                for (Map.Entry<BlueMapWorld, ScanResult> entry : cached.entrySet()) {
+                    logScanSummary(entry.getKey().getId(), entry.getValue());
+                }
+                overlays.update(api, cached);
+                exporter.export(api, cached);
+            }
         }
 
-        // Kick off background rescan
+        // Kick off background rescan of all worlds
         Thread scanThread = new Thread(() -> {
             try {
-                Path regionDir = resolveRegionDir(api, config);
-                if (regionDir == null) {
-                    System.err.println("[ChunkTrimmer] Could not find world region directory. " +
-                            "Set 'worldRegionPath' in " + configDir.resolve("config.json"));
+                Map<BlueMapWorld, Path> worldRegions = resolveAllRegionDirs(api);
+                if (worldRegions.isEmpty()) {
+                    System.err.println("[ChunkTrimmer] No world region directories found");
                     return;
                 }
 
-                System.out.println("[ChunkTrimmer] Starting background scan of " + regionDir);
+                System.out.println("[ChunkTrimmer] Starting background scan of " +
+                        worldRegions.size() + " world(s)");
                 long startTime = System.currentTimeMillis();
 
                 ChunkScanner scanner = new ChunkScanner(classifier);
-                Map<String, ChunkAnalysis> chunks = scanner.scan(regionDir);
+                Map<BlueMapWorld, ScanResult> results = new LinkedHashMap<>();
 
-                ScanResult result = new ScanResult(
-                        regionDir.getParent().getFileName().toString(),
-                        System.currentTimeMillis(),
-                        chunks
-                );
+                for (Map.Entry<BlueMapWorld, Path> entry : worldRegions.entrySet()) {
+                    BlueMapWorld world = entry.getKey();
+                    Path regionDir = entry.getValue();
 
-                cache.save(result);
+                    System.out.println("[ChunkTrimmer] Scanning world '" + world.getId() +
+                            "' at " + regionDir);
+
+                    Map<String, ChunkAnalysis> chunks = scanner.scan(regionDir);
+
+                    ScanResult result = new ScanResult(
+                            regionDir.getParent().getFileName().toString(),
+                            System.currentTimeMillis(),
+                            chunks
+                    );
+
+                    cache.save(world.getId(), result);
+                    results.put(world, result);
+                    logScanSummary(world.getId(), result);
+                }
 
                 long elapsed = System.currentTimeMillis() - startTime;
                 System.out.println("[ChunkTrimmer] Background scan complete in " + elapsed + "ms");
-                logScanSummary(result);
 
-                overlays.update(api, result);
-                exporter.export(api, result);
+                overlays.update(api, results);
+                exporter.export(api, results);
 
             } catch (IOException e) {
                 System.err.println("[ChunkTrimmer] Scan failed: " + e.getMessage());
@@ -96,40 +111,50 @@ public class ChunkTrimmerAddon implements Runnable {
     }
 
     /**
-     * Resolves the world's region/ directory.
-     * Priority: config override > auto-detect from BlueMap worlds.
+     * Discovers region directories for all BlueMap worlds.
      */
     @SuppressWarnings("deprecation")
-    private Path resolveRegionDir(BlueMapAPI api, Config config) {
-        // 1. Config override
-        String configPath = config.getWorldRegionPath();
-        if (configPath != null && !configPath.isBlank()) {
-            Path p = Path.of(configPath);
-            if (Files.isDirectory(p)) return p;
-            System.err.println("[ChunkTrimmer] Configured region path not found: " + configPath);
-        }
+    private Map<BlueMapWorld, Path> resolveAllRegionDirs(BlueMapAPI api) {
+        Map<BlueMapWorld, Path> result = new LinkedHashMap<>();
 
-        // 2. Auto-detect from BlueMap's world list
         for (BlueMapWorld world : api.getWorlds()) {
             try {
                 Path saveFolder = world.getSaveFolder();
                 Path regionDir = saveFolder.resolve("region");
                 if (Files.isDirectory(regionDir)) {
-                    System.out.println("[ChunkTrimmer] Auto-detected region dir: " + regionDir);
-                    return regionDir;
+                    result.put(world, regionDir);
+                    System.out.println("[ChunkTrimmer] Found region dir for '" + world.getId() +
+                            "': " + regionDir);
                 }
             } catch (Exception e) {
-                // getSaveFolder() may throw if world has no save folder
+                System.err.println("[ChunkTrimmer] Warning: Could not access save folder for world '" +
+                        world.getId() + "': " + e.getMessage());
             }
         }
 
-        return null;
+        return result;
     }
 
-    private void logScanSummary(ScanResult result) {
-        System.out.println("[ChunkTrimmer] World: " + result.worldName());
-        System.out.println("[ChunkTrimmer]   Total chunks: " + result.totalChunks());
-        System.out.println("[ChunkTrimmer]   Chunks with activity: " + result.chunksWithActivity());
-        System.out.println("[ChunkTrimmer]   Chunks with player blocks: " + result.chunksWithPlayerBlocks());
+    /**
+     * Maps cached ScanResults (keyed by world ID string) back to BlueMapWorld objects.
+     */
+    private Map<BlueMapWorld, ScanResult> resolveWorlds(BlueMapAPI api, Map<String, ScanResult> cached) {
+        Map<BlueMapWorld, ScanResult> resolved = new LinkedHashMap<>();
+
+        for (BlueMapWorld world : api.getWorlds()) {
+            ScanResult result = cached.get(world.getId());
+            if (result != null) {
+                resolved.put(world, result);
+            }
+        }
+
+        return resolved;
+    }
+
+    private void logScanSummary(String worldId, ScanResult result) {
+        System.out.println("[ChunkTrimmer] World '" + worldId + "': " +
+                result.totalChunks() + " chunks, " +
+                result.chunksWithActivity() + " with activity, " +
+                result.chunksWithPlayerBlocks() + " with player blocks");
     }
 }

@@ -74,11 +74,21 @@
                 return r.json();
             })
             .then((data) => {
-                scanData = data;
+                // Flatten all world chunks into a single lookup map
+                // for export enrichment (keyed by "x,z")
+                const allChunks = {};
+                const worlds = data.worlds || {};
+                let totalChunks = 0;
+                for (const worldId of Object.keys(worlds)) {
+                    const worldChunks = worlds[worldId].chunks || {};
+                    Object.assign(allChunks, worldChunks);
+                    totalChunks += Object.keys(worldChunks).length;
+                }
+                scanData = { worlds: worlds, chunks: allChunks };
                 console.log(
                     "[ChunkTrimmer] Loaded scan data: " +
-                        Object.keys(data.chunks || {}).length +
-                        " chunks"
+                        totalChunks + " chunks across " +
+                        Object.keys(worlds).length + " world(s)"
                 );
             })
             .catch(() => {

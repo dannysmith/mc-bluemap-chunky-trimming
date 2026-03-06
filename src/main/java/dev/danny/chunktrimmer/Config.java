@@ -14,16 +14,12 @@ public class Config {
 
     private static final String CONFIG_FILE = "config.json";
 
-    /** Override path to the world's region/ directory. Empty = auto-detect. */
-    private String worldRegionPath = "";
-
     /** Y level at which to render overlay markers. */
     private float overlayY = 64f;
 
     /** Additional player block IDs beyond the default set. */
     private Set<String> extraPlayerBlocks = Set.of();
 
-    public String getWorldRegionPath() { return worldRegionPath; }
     public float getOverlayY() { return overlayY; }
     public Set<String> getExtraPlayerBlocks() { return extraPlayerBlocks; }
 
@@ -43,9 +39,6 @@ public class Config {
             JsonObject root = JsonParser.parseReader(reader).getAsJsonObject();
             Config config = new Config();
 
-            if (root.has("worldRegionPath")) {
-                config.worldRegionPath = root.get("worldRegionPath").getAsString();
-            }
             if (root.has("overlayY")) {
                 config.overlayY = root.get("overlayY").getAsFloat();
             }
@@ -70,7 +63,6 @@ public class Config {
             Path configFile = configDir.resolve(CONFIG_FILE);
 
             JsonObject root = new JsonObject();
-            root.addProperty("worldRegionPath", worldRegionPath);
             root.addProperty("overlayY", overlayY);
 
             JsonArray blocks = new JsonArray();
