@@ -14,18 +14,13 @@
 
 ---
 
-## Bug 3: Chunk selection clicks blocked by heatmap marker overlays — OPEN
+## Bug 3: Chunk selection clicks blocked by heatmap marker overlays — FIXED
 
 **Problem:** When heatmap overlays are visible, Ctrl/Cmd+clicking on a heatmap-covered chunk doesn't select it. The heatmap ShapeMarkers intercept the interaction.
 
-**Attempted fixes (neither worked):**
-1. Canvas-level `click` handler with `{ capture: true }` + `stopPropagation()` — BlueMap processes marker clicks on `pointerup` before `click` fires
-2. Document-level `pointerup` handler with `{ capture: true }` + `stopImmediatePropagation()` + ground-plane raycasting — still didn't intercept. BlueMap's event handling may not use standard DOM pointer events, or may use a different mechanism entirely (e.g. Three.js raycasting on requestAnimationFrame, or internal event dispatch)
+**Root cause:** BlueMap uses internal Three.js raycasting against scene objects to detect marker clicks, bypassing DOM event propagation entirely. DOM-level `stopImmediatePropagation()` on capture-phase `pointerup`/`click` handlers cannot prevent this because the raycasting isn't triggered by DOM events.
 
-**Next steps:** Investigate how BlueMap's web app actually dispatches marker interactions. May need to look at BlueMap's source code to understand the event flow. Alternative approaches:
-- Disable heatmap marker raycasting (if BlueMap exposes this)
-- Temporarily remove/hide heatmap markers while selection mode is active
-- Hook into BlueMap's internal event system rather than DOM events
+**Fix:** Replaced DOM event interception with a transparent `<div>` overlay positioned above the canvas. When selection mode is active and Ctrl/Cmd is held, the overlay switches to `pointer-events: auto`, physically blocking pointer events from reaching the canvas (and thus BlueMap's raycaster). The overlay handles its own `pointerdown`/`pointerup` for selection, using the same ground-plane raycasting math. When the modifier key is released, the overlay returns to `pointer-events: none` so all normal map interaction passes through.
 
 ---
 

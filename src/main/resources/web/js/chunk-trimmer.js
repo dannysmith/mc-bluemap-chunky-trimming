@@ -24,6 +24,7 @@
     // Three.js objects for selection overlay
     const selectionMeshes = new Map(); // "x,z" -> Mesh
     let selectionGroup = null;
+    let overlayEl = null;
 
     // ── Constants ──────────────────────────────────────────────
 
@@ -58,7 +59,7 @@
 
     function init() {
         createUI();
-        listenForClicks();
+        createOverlay();
         loadSelection();
         fetchScanData();
     }
@@ -99,60 +100,81 @@
     // Ground plane for raycasting (Y = OVERLAY_Y, normal pointing up)
     const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -OVERLAY_Y);
 
-    function listenForClicks() {
+    /**
+     * Creates a transparent DOM overlay on top of the canvas.
+     * When selection mode is active and Ctrl/Cmd is held, the overlay
+     * captures pointer events before they reach BlueMap's canvas,
+     * preventing heatmap ShapeMarkers from intercepting selection clicks.
+     *
+     * Previous approaches (document-level capture-phase stopImmediatePropagation
+     * on pointerup/click) failed because BlueMap uses internal Three.js raycasting
+     * that bypasses DOM event propagation entirely.
+     */
+    function createOverlay() {
+        const canvas = app.mapViewer.renderer.domElement;
+        const parent = canvas.parentElement;
+
+        overlayEl = document.createElement("div");
+        overlayEl.id = "ct-click-overlay";
+
+        // Ensure parent is a positioning context
+        if (getComputedStyle(parent).position === "static") {
+            parent.style.position = "relative";
+        }
+
+        overlayEl.style.cssText =
+            "position:absolute;top:0;left:0;width:100%;height:100%;" +
+            "z-index:10;pointer-events:none;cursor:crosshair;";
+        parent.appendChild(overlayEl);
+
+        // Overlay click handling
         let downPos = null;
 
-        // Track pointer-down position for drag detection.
-        // Document-level capture fires before any element handlers.
-        document.addEventListener("pointerdown", (e) => {
+        overlayEl.addEventListener("pointerdown", (e) => {
+            if (e.button !== 0) return;
             downPos = { x: e.clientX, y: e.clientY };
-        }, { capture: true });
+            e.preventDefault();
+        });
 
-        // Intercept pointer-up at document level in capture phase.
-        // This fires BEFORE BlueMap's element-level handlers that process
-        // marker clicks/popups, so we can steal the event.
-        document.addEventListener("pointerup", (e) => {
-            if (!active) return;
-            if (!e.ctrlKey && !e.metaKey) return;
+        overlayEl.addEventListener("pointerup", (e) => {
+            if (e.button !== 0 || !downPos) return;
 
-            // Check click is within the map canvas
-            const canvas = app.mapViewer.renderer.domElement;
-            const rect = canvas.getBoundingClientRect();
-            if (e.clientX < rect.left || e.clientX > rect.right ||
-                e.clientY < rect.top || e.clientY > rect.bottom) return;
+            const dx = e.clientX - downPos.x;
+            const dy = e.clientY - downPos.y;
+            downPos = null;
 
             // Ignore drags (> 5px movement)
-            if (downPos) {
-                const dx = e.clientX - downPos.x;
-                const dy = e.clientY - downPos.y;
-                if (Math.sqrt(dx * dx + dy * dy) > 5) return;
-            }
+            if (Math.sqrt(dx * dx + dy * dy) > 5) return;
 
-            // Stop BlueMap from processing this as a marker click
-            e.stopImmediatePropagation();
             e.preventDefault();
 
-            // Raycast from camera through mouse position to ground plane
             const pos = worldPosFromMouse(e);
             if (!pos) return;
 
             const chunkX = Math.floor(pos.x / CHUNK_SIZE);
             const chunkZ = Math.floor(pos.z / CHUNK_SIZE);
             toggleChunk(chunkX + "," + chunkZ, chunkX, chunkZ);
-        }, { capture: true });
+        });
 
-        // Also suppress the click event to prevent any residual handlers
-        document.addEventListener("click", (e) => {
-            if (!active) return;
-            if (!e.ctrlKey && !e.metaKey) return;
-            const canvas = app.mapViewer.renderer.domElement;
-            const rect = canvas.getBoundingClientRect();
-            if (e.clientX >= rect.left && e.clientX <= rect.right &&
-                e.clientY >= rect.top && e.clientY <= rect.bottom) {
-                e.stopImmediatePropagation();
-                e.preventDefault();
+        // Ctrl/Cmd key tracking: overlay only intercepts when modifier held
+        document.addEventListener("keydown", (e) => {
+            if (!active || !overlayEl) return;
+            if (e.key === "Control" || e.key === "Meta") {
+                overlayEl.style.pointerEvents = "auto";
             }
-        }, { capture: true });
+        });
+
+        document.addEventListener("keyup", (e) => {
+            if (!overlayEl) return;
+            if (e.key === "Control" || e.key === "Meta") {
+                overlayEl.style.pointerEvents = "none";
+            }
+        });
+
+        // Safety: reset if window loses focus while modifier held
+        window.addEventListener("blur", () => {
+            if (overlayEl) overlayEl.style.pointerEvents = "none";
+        });
     }
 
     function worldPosFromMouse(e) {
@@ -339,8 +361,9 @@
             if (active) {
                 rebuildAllMeshes();
                 updatePanel();
-            } else if (selectionGroup) {
-                clearSelectionMeshes();
+            } else {
+                if (overlayEl) overlayEl.style.pointerEvents = "none";
+                if (selectionGroup) clearSelectionMeshes();
             }
         });
 
