@@ -42,15 +42,17 @@ public class OverlayManager {
             ScanResult result = entry.getValue();
 
             MarkerSet heatmapSet = MarkerSet.builder()
-                    .label("Inhabited Time")
+                    .label("\uD83D\uDCCA Inhabited Time")
                     .toggleable(true)
                     .defaultHidden(true)
+                    .sorting(1000)
                     .build();
 
             MarkerSet modifiedSet = MarkerSet.builder()
-                    .label("Player Modified")
+                    .label("\uD83D\uDCCA Player Modified")
                     .toggleable(true)
                     .defaultHidden(true)
+                    .sorting(1001)
                     .build();
 
             int heatmapCount = 0;
