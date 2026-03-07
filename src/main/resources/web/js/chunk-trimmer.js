@@ -23,6 +23,7 @@
     let selection = new Set();  // alias → active world's set
     let currentWorldId = null;
     let lastMapId = null;
+    let heatmapVisible = true;
 
     // Three.js objects for selection overlay
     const selectionMeshes = new Map(); // "x,z" -> Mesh
@@ -35,8 +36,7 @@
 
     const CHUNK_SIZE = 16;
     const OVERLAY_Y = 65;
-    const SELECTION_COLOR = 0xe64a19; // deep orange
-    const SELECTION_OPACITY = 0.45;
+    const SELECTION_COLOR = 0x00bcd4; // cyan — distinct from heatmap green/yellow/red
     const STORAGE_KEY = "chunk-trimmer-selection";
     const DATA_PATH = "assets/chunk-trimmer/data.json";
 
@@ -44,13 +44,39 @@
     const chunkGeometry = new THREE.PlaneGeometry(CHUNK_SIZE, CHUNK_SIZE);
     chunkGeometry.rotateX(-Math.PI / 2); // lay flat on xz-plane
 
+    // Diagonal stripe texture for selected chunks
+    var stripeTexture = createStripeTexture();
     const selectionMaterial = new THREE.MeshBasicMaterial({
-        color: SELECTION_COLOR,
+        map: stripeTexture,
         transparent: true,
-        opacity: SELECTION_OPACITY,
         side: THREE.DoubleSide,
         depthTest: false,
     });
+
+    function createStripeTexture() {
+        var size = 64;
+        var canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+        var ctx = canvas.getContext("2d");
+
+        ctx.clearRect(0, 0, size, size);
+
+        // Diagonal stripes in cyan
+        ctx.strokeStyle = "rgba(0, 188, 212, 0.55)";
+        ctx.lineWidth = 7;
+        for (var i = -size; i < size * 2; i += 16) {
+            ctx.beginPath();
+            ctx.moveTo(i, size);
+            ctx.lineTo(i + size, 0);
+            ctx.stroke();
+        }
+
+        var texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        return texture;
+    }
 
     // Border material
     const borderGeometry = new THREE.EdgesGeometry(chunkGeometry);
@@ -186,7 +212,36 @@
                 switchToWorld(wid);
                 saveSelection();
             }
+            heatmapVisible = checkHeatmapVisible();
         }, 500);
+    }
+
+    /**
+     * Checks if the heatmap marker set is toggled visible in BlueMap's sidebar.
+     * Searches the Three.js scene graph for the marker set by label.
+     */
+    function checkHeatmapVisible() {
+        try {
+            var root = app.mapViewer.markers;
+            for (var i = 0; i < root.children.length; i++) {
+                var child = root.children[i];
+                if (child === selectionGroup) continue;
+                if (isHeatmapSet(child)) return child.visible;
+                // Marker sets may be nested under a marker file manager
+                for (var j = 0; j < child.children.length; j++) {
+                    if (isHeatmapSet(child.children[j])) return child.children[j].visible;
+                }
+            }
+        } catch (e) {}
+        return true;
+    }
+
+    function isHeatmapSet(obj) {
+        try {
+            if (obj.data && typeof obj.data.label === "string" &&
+                obj.data.label.indexOf("Inhabited Time") >= 0) return true;
+        } catch (e) {}
+        return false;
     }
 
     // ── Click Handling ─────────────────────────────────────────
@@ -313,7 +368,7 @@
     }
 
     function onHoverMove(e) {
-        if (!scanData || !hudEl) {
+        if (!scanData || !hudEl || !heatmapVisible) {
             hideHud();
             return;
         }
