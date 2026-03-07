@@ -1,6 +1,6 @@
 # AI Instructions - BlueMap Chunk Trimmer
 
-BlueMap addon (Java JAR) that scans Minecraft `.mca` region files, visualizes chunk activity as BlueMap overlays, and provides interactive chunk selection for trimming. See `docs/plan.md` for architecture and progress, `docs/requirements.md` for the original brief, `docs/research.md` for API findings.
+BlueMap addon (Java JAR) that scans Minecraft `.mca` region files, visualizes chunk activity as BlueMap overlays, and provides interactive chunk selection for trimming. See `docs/archive/` for the original plan, requirements, and API research.
 
 See @docs/tasks.md for task management
 
@@ -8,7 +8,7 @@ See @docs/tasks.md for task management
 
 - `src/main/java/dev/danny/chunktrimmer/` — Java source (entrypoint: `ChunkTrimmerAddon.java`)
   - `scanner/` — Region file reading, chunk analysis, caching
-  - `overlay/` — BlueMap marker overlay generation (heatmap, modified, selection)
+  - `overlay/` — BlueMap marker overlay generation (heatmap colors, marker sets)
   - `web/` — Data export to web root + web addon installer
 - `src/main/resources/bluemap.addon.json` — BlueMap addon descriptor
 - `src/main/resources/web/` — Web addon JS/CSS (copied to web root at runtime)
