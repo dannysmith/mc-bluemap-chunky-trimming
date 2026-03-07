@@ -1,65 +1,77 @@
 # BlueMap Chunk Trimmer
 
-A BlueMap native addon that scans Minecraft `.mca` region files, visualizes chunk activity as BlueMap overlays, and provides interactive chunk selection for trimming.
+A [BlueMap](https://bluemap.bluecolored.de/) addon that helps you visualize and manage chunk activity on your Minecraft server. It reads the `InhabitedTime` NBT data from your `.mca` region files and renders it as a color-coded heatmap overlay directly on your BlueMap, so you can see at a glance where players have actually spent time. It also includes an interactive chunk selector that lets you pick chunks visually and export them for deletion with tools like MCA Selector — useful for trimming unused chunks to reduce world size or force terrain regeneration.
 
-## Features
+Both features are only available in BlueMap's flat (2D) view.
 
-- **InhabitedTime heatmap overlay** — color-coded chunks showing player activity
-- **Interactive chunk selection** — click to select/deselect, Ctrl/Cmd+drag to paint, Shift+drag to rectangle-select
-- **Export selections** — download selected chunks as JSON or CSV for use with trimming tools
+> **Heatmap data is read once at startup.** The addon parses region files when BlueMap first loads, so the heatmap reflects the state of the world at that point. To pick up new activity, restart the server or run `/bluemap reload`.
 
-## Export Format
+## Heatmap Overlay
 
-The chunk selector exports JSON and CSV files containing the selected chunks.
+The heatmap shows cumulative player activity per chunk. Each chunk that's been inhabited for more than 1 second gets a colored overlay, with the color indicating how much total time players have spent there. Colors blend smoothly between these thresholds:
 
-### JSON
+- **Blue** — under 1 minute of activity
+- **Teal/cyan** — around 1 minute
+- **Yellow/orange** — around 10 minutes
+- **Red** — 1 hour or more
+
+Chunks with less than 1 second of inhabited time don't appear on the heatmap at all, which keeps the map clean — most chunks a player has merely passed through at speed won't show up.
+
+The heatmap renders as a set of BlueMap marker overlays that you can toggle on and off in the markers panel like any other BlueMap layer.
+
+When the heatmap is visible, a small HUD appears at the bottom of the screen as you move your cursor. It shows the chunk coordinates, the inhabited time in a human-readable format (e.g. "2h 15m"), and the exact tick count underneath.
+
+## Chunk Selector
+
+The chunk selector lets you visually pick chunks on the map for export. Enable it by clicking the chunk trimmer icon in the top-left toolbar (only visible in flat view).
+
+### Selecting chunks
+
+- **Ctrl/Cmd + click** a chunk to select or deselect it. Selected chunks appear with a cyan hatched pattern.
+- **Ctrl/Cmd + click and drag** to paint across multiple chunks. Whether this selects or deselects depends on the state of the first chunk you click — if it's unselected, dragging selects; if it's already selected, dragging deselects.
+- **Shift  click and drag** to draw a rectangle. All chunks inside the rectangle get selected (or deselected, same logic as above). You'll see a white outline preview of the rectangle as you drag.
+
+Selections are stored per-dimension (Overworld, Nether, The End) and persist in your browser's local storage, so they survive page refreshes.
+
+### Exporting selections
+
+The panel in the bottom-right shows your current selection count and provides two export options:
+
+**JSON** includes chunk coordinates, inhabited time data, and world metadata:
 
 ```json
 {
+  "dimension": "overworld",
+  "worldName": "world",
   "chunks": [
-    {
-      "chunkX": -9,
-      "chunkZ": 2,
-      "inhabitedTime": 161
-    }
+    { "chunkX": -9, "chunkZ": 2, "inhabitedTime": 161 },
+    { "chunkX": 10, "chunkZ": 15, "inhabitedTime": 45000 }
   ]
 }
 ```
 
-### CSV (MCA Selector format)
+The `inhabitedTime` values are in game ticks (20 ticks = 1 second).
 
-Semicolon-delimited, no header. Can be used directly with MCA Selector's chunk filter.
+**CSV** exports in MCA Selector's semicolon-delimited format, which you can use directly with MCA Selector's chunk filter to delete the selected chunks:
 
 ```csv
 0;0;-9;2
-0;0;-9;3
+0;0;10;15
 ```
 
-### Field reference
+The four columns are `regionX;regionZ;chunkX;chunkZ` (no header row).
 
-**JSON fields:**
+## Installation
 
-| Field | Description |
-|-------|-------------|
-| `chunkX` | Chunk X coordinate. Each chunk is a 16x16 block column, so chunk X of -9 covers blocks -144 to -129. Convert with `chunkX = floor(blockX / 16)`. |
-| `chunkZ` | Chunk Z coordinate (same convention as chunkX, on the Z axis). |
-| `inhabitedTime` | Cumulative time (in game ticks, 20 ticks = 1 second) that players have spent in this chunk. Higher values indicate more player activity. |
+Place the JAR in BlueMap's `packs/` directory — not `mods/`. This is a BlueMap native addon, not a Fabric/Forge mod. Requires Java 21.
 
-**CSV columns** (semicolon-delimited, in order):
+## Development
 
-| Column | Description |
-|--------|-------------|
-| `regionX` | Region file X coordinate (`floor(chunkX / 32)`). |
-| `regionZ` | Region file Z coordinate. |
-| `chunkX` | Chunk X coordinate. |
-| `chunkZ` | Chunk Z coordinate. |
-
-## Build
+Requires Java 21 and Gradle (wrapper included).
 
 ```bash
-./gradlew shadowJar  # outputs to build/libs/bluemap-chunk-trimmer-0.1.0.jar
+./gradlew shadowJar    # build fat JAR → build/libs/bluemap-chunk-trimmer-0.1.0.jar
+./gradlew compileJava  # compile check only
 ```
 
-## Install
-
-Place the JAR in BlueMap's `packs/` directory (not `mods/`). Requires Java 21.
+The shadow JAR relocates the [Querz NBT](https://github.com/Querz/NBT) library to avoid classpath conflicts. BlueMap provides Gson at runtime, so it's not bundled.
