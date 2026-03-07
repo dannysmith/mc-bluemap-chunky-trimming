@@ -110,6 +110,9 @@ public class ScanCache {
             obj.addProperty("x", src.chunkX());
             obj.addProperty("z", src.chunkZ());
             obj.addProperty("it", src.inhabitedTime());
+            if (src.regionTimestamp() != 0) {
+                obj.addProperty("ts", src.regionTimestamp());
+            }
             return obj;
         }
 
@@ -121,7 +124,8 @@ public class ScanCache {
             return new ChunkAnalysis(
                     obj.get("x").getAsInt(),
                     obj.get("z").getAsInt(),
-                    obj.get("it").getAsLong()
+                    obj.get("it").getAsLong(),
+                    obj.has("ts") ? obj.get("ts").getAsInt() : 0
             );
         }
     }

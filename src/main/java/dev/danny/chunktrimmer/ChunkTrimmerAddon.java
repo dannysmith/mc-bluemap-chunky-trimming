@@ -79,10 +79,15 @@ public class ChunkTrimmerAddon implements Runnable {
                     BlueMapWorld world = entry.getKey();
                     Path regionDir = entry.getValue();
 
+                    // Pass previous cached results for incremental scanning
+                    ScanResult previousResult = cachedByKey.get(world.getId());
+                    Map<String, ChunkAnalysis> previousChunks =
+                            previousResult != null ? previousResult.chunks() : null;
+
                     System.out.println("[ChunkTrimmer] Scanning world '" + world.getId() +
                             "' at " + regionDir);
 
-                    Map<String, ChunkAnalysis> chunks = scanner.scan(regionDir);
+                    Map<String, ChunkAnalysis> chunks = scanner.scan(regionDir, previousChunks);
                     Long seed = readWorldSeed(regionDir.getParent());
 
                     ScanResult result = new ScanResult(

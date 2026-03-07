@@ -49,6 +49,31 @@ public class RegionFileReader {
     }
 
     /**
+     * Reads the per-chunk timestamp table from a region file header.
+     * Returns an array of 1024 timestamps (seconds since epoch), indexed by localZ * 32 + localX.
+     */
+    public static int[] readTimestamps(Path regionFile) throws IOException {
+        int[] timestamps = new int[1024];
+        try (RandomAccessFile raf = new RandomAccessFile(regionFile.toFile(), "r")) {
+            if (raf.length() < SECTOR_SIZE * HEADER_SECTORS) return timestamps;
+
+            // Skip location table, read timestamp table (second 4096 bytes)
+            raf.seek(SECTOR_SIZE);
+            byte[] timestampTable = new byte[SECTOR_SIZE];
+            raf.readFully(timestampTable);
+
+            for (int i = 0; i < 1024; i++) {
+                int offset = i * 4;
+                timestamps[i] = ((timestampTable[offset] & 0xFF) << 24)
+                        | ((timestampTable[offset + 1] & 0xFF) << 16)
+                        | ((timestampTable[offset + 2] & 0xFF) << 8)
+                        | (timestampTable[offset + 3] & 0xFF);
+            }
+        }
+        return timestamps;
+    }
+
+    /**
      * Reads all chunks from a region file, calling the consumer for each
      * chunk that exists with its absolute chunk coordinates and raw NBT data.
      *

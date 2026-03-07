@@ -6,7 +6,8 @@ package dev.danny.chunktrimmer.scanner;
 public record ChunkAnalysis(
         int chunkX,
         int chunkZ,
-        long inhabitedTime
+        long inhabitedTime,
+        int regionTimestamp
 ) {
     /** InhabitedTime converted to seconds. */
     public double inhabitedSeconds() {

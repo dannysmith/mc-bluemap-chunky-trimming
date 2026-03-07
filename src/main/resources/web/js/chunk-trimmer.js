@@ -46,6 +46,11 @@
     const chunkGeometry = new THREE.PlaneGeometry(CHUNK_SIZE, CHUNK_SIZE);
     chunkGeometry.rotateX(-Math.PI / 2); // lay flat on xz-plane
 
+    // Pre-allocated Three.js objects for raycasting (reused every mousemove)
+    const _mouseVec = new THREE.Vector2();
+    const _raycaster = new THREE.Raycaster();
+    const _intersection = new THREE.Vector3();
+
     // Diagonal stripe texture for selected chunks
     var stripeTexture = createStripeTexture();
     const selectionMaterial = new THREE.MeshBasicMaterial({
@@ -608,15 +613,13 @@
     function worldPosFromMouse(e) {
         const canvas = app.mapViewer.renderer.domElement;
         const rect = canvas.getBoundingClientRect();
-        const mouse = new THREE.Vector2(
+        _mouseVec.set(
             ((e.clientX - rect.left) / rect.width) * 2 - 1,
             -((e.clientY - rect.top) / rect.height) * 2 + 1
         );
-        const raycaster = new THREE.Raycaster();
-        raycaster.setFromCamera(mouse, app.mapViewer.camera);
-        const intersection = new THREE.Vector3();
-        return raycaster.ray.intersectPlane(groundPlane, intersection)
-            ? intersection
+        _raycaster.setFromCamera(_mouseVec, app.mapViewer.camera);
+        return _raycaster.ray.intersectPlane(groundPlane, _intersection)
+            ? _intersection
             : null;
     }
 
