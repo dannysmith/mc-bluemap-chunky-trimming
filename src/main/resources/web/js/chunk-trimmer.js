@@ -390,53 +390,219 @@
             "z-index:10;pointer-events:none;cursor:crosshair;";
         parent.appendChild(overlayEl);
 
-        // Overlay click handling
-        let downPos = null;
+        // ── Drag state machine ──
+        let downPos = null;       // {x, y} screen coords at pointerdown
+        let dragMode = null;      // null | "paint" | "rect"
+        let paintAction = null;   // "select" | "deselect"
+        let paintedChunks = null; // Set of keys touched during this paint drag
+        let rectAnchor = null;    // {chunkX, chunkZ} for rectangle start corner
+        let rectPreview = null;   // THREE.Group for rectangle preview outline
+
+        function chunkFromEvent(e) {
+            const pos = worldPosFromMouse(e);
+            if (!pos) return null;
+            const chunkX = Math.floor(pos.x / CHUNK_SIZE);
+            const chunkZ = Math.floor(pos.z / CHUNK_SIZE);
+            return { chunkX: chunkX, chunkZ: chunkZ, key: chunkX + "," + chunkZ };
+        }
+
+        function applyPaint(chunk) {
+            if (!chunk || paintedChunks.has(chunk.key)) return;
+            paintedChunks.add(chunk.key);
+            if (paintAction === "select") {
+                selectChunk(chunk.key, chunk.chunkX, chunk.chunkZ);
+            } else {
+                deselectChunk(chunk.key);
+            }
+            updatePanel();
+        }
+
+        function resetDragState() {
+            downPos = null;
+            dragMode = null;
+            paintAction = null;
+            paintedChunks = null;
+            rectAnchor = null;
+            removeRectPreview();
+        }
+
+        // ── Rectangle preview ──
+
+        function removeRectPreview() {
+            if (rectPreview) {
+                if (selectionGroup) selectionGroup.remove(rectPreview);
+                rectPreview = null;
+            }
+        }
+
+        function updateRectPreview(ax, az, bx, bz) {
+            removeRectPreview();
+            ensureSelectionGroup();
+
+            var minX = Math.min(ax, bx);
+            var maxX = Math.max(ax, bx);
+            var minZ = Math.min(az, bz);
+            var maxZ = Math.max(az, bz);
+
+            // World coords: from min chunk's left edge to max chunk's right edge
+            var x1 = minX * CHUNK_SIZE;
+            var z1 = minZ * CHUNK_SIZE;
+            var x2 = (maxX + 1) * CHUNK_SIZE;
+            var z2 = (maxZ + 1) * CHUNK_SIZE;
+
+            var vertices = new Float32Array([
+                x1, OVERLAY_Y + 0.5, z1,
+                x2, OVERLAY_Y + 0.5, z1,
+                x2, OVERLAY_Y + 0.5, z1,
+                x2, OVERLAY_Y + 0.5, z2,
+                x2, OVERLAY_Y + 0.5, z2,
+                x1, OVERLAY_Y + 0.5, z2,
+                x1, OVERLAY_Y + 0.5, z2,
+                x1, OVERLAY_Y + 0.5, z1,
+            ]);
+
+            var geometry = new THREE.BufferGeometry();
+            geometry.setAttribute("position", new THREE.BufferAttribute(vertices, 3));
+
+            var material = new THREE.LineBasicMaterial({
+                color: 0xffffff,
+                linewidth: 2,
+                depthTest: false,
+            });
+
+            rectPreview = new THREE.LineSegments(geometry, material);
+            selectionGroup.add(rectPreview);
+        }
+
+        function applyRectangle(ax, az, bx, bz) {
+            var minX = Math.min(ax, bx);
+            var maxX = Math.max(ax, bx);
+            var minZ = Math.min(az, bz);
+            var maxZ = Math.max(az, bz);
+
+            for (var x = minX; x <= maxX; x++) {
+                for (var z = minZ; z <= maxZ; z++) {
+                    var key = x + "," + z;
+                    if (paintAction === "select") {
+                        selectChunk(key, x, z);
+                    } else {
+                        deselectChunk(key);
+                    }
+                }
+            }
+            updatePanel();
+            saveSelection();
+        }
+
+        // ── Pointer events ──
 
         overlayEl.addEventListener("pointerdown", (e) => {
             if (e.button !== 0) return;
-            downPos = { x: e.clientX, y: e.clientY };
             e.preventDefault();
+            overlayEl.setPointerCapture(e.pointerId);
+
+            var chunk = chunkFromEvent(e);
+
+            if (e.shiftKey) {
+                // Rectangle mode
+                if (!chunk) return;
+                dragMode = "rect";
+                paintAction = selection.has(chunk.key) ? "deselect" : "select";
+                rectAnchor = { chunkX: chunk.chunkX, chunkZ: chunk.chunkZ };
+                return;
+            }
+
+            // Cmd/Ctrl: record down position, wait for movement to decide paint vs click
+            downPos = { x: e.clientX, y: e.clientY, chunk: chunk };
+        });
+
+        overlayEl.addEventListener("pointermove", (e) => {
+            if (dragMode === null && downPos) {
+                // Check if we've moved enough to enter paint mode
+                var dx = e.clientX - downPos.x;
+                var dy = e.clientY - downPos.y;
+                if (Math.sqrt(dx * dx + dy * dy) > 5) {
+                    dragMode = "paint";
+                    paintedChunks = new Set();
+                    // Determine action from the chunk under the original down position
+                    if (downPos.chunk) {
+                        paintAction = selection.has(downPos.chunk.key) ? "deselect" : "select";
+                        applyPaint(downPos.chunk);
+                    } else {
+                        paintAction = "select";
+                    }
+                }
+            }
+
+            if (dragMode === "paint") {
+                applyPaint(chunkFromEvent(e));
+            } else if (dragMode === "rect" && rectAnchor) {
+                var chunk = chunkFromEvent(e);
+                if (chunk) {
+                    updateRectPreview(rectAnchor.chunkX, rectAnchor.chunkZ, chunk.chunkX, chunk.chunkZ);
+                }
+            }
         });
 
         overlayEl.addEventListener("pointerup", (e) => {
-            if (e.button !== 0 || !downPos) return;
-
-            const dx = e.clientX - downPos.x;
-            const dy = e.clientY - downPos.y;
-            downPos = null;
-
-            // Ignore drags (> 5px movement)
-            if (Math.sqrt(dx * dx + dy * dy) > 5) return;
-
+            if (e.button !== 0) return;
             e.preventDefault();
 
-            const pos = worldPosFromMouse(e);
-            if (!pos) return;
+            if (dragMode === "paint") {
+                // Paint drag finished — save the batch
+                saveSelection();
+            } else if (dragMode === "rect" && rectAnchor) {
+                // Rectangle drag finished — apply to all chunks in the box
+                var chunk = chunkFromEvent(e);
+                if (chunk) {
+                    applyRectangle(rectAnchor.chunkX, rectAnchor.chunkZ, chunk.chunkX, chunk.chunkZ);
+                }
+                removeRectPreview();
+            } else if (downPos) {
+                // No drag — single click toggle
+                var chunk = chunkFromEvent(e);
+                if (chunk) {
+                    toggleChunk(chunk.key, chunk.chunkX, chunk.chunkZ);
+                }
+            }
 
-            const chunkX = Math.floor(pos.x / CHUNK_SIZE);
-            const chunkZ = Math.floor(pos.z / CHUNK_SIZE);
-            toggleChunk(chunkX + "," + chunkZ, chunkX, chunkZ);
+            resetDragState();
         });
 
-        // Ctrl/Cmd key tracking: overlay only intercepts when modifier held
+        // Cancel drag if pointer capture lost (e.g. focus change)
+        overlayEl.addEventListener("lostpointercapture", () => {
+            resetDragState();
+        });
+
+        // ── Modifier key tracking ──
+        // Overlay intercepts pointer events when Ctrl/Cmd or Shift is held
+
+        function isSelectionModifier(key) {
+            return key === "Control" || key === "Meta" || key === "Shift";
+        }
+
         document.addEventListener("keydown", (e) => {
             if (!active || !overlayEl) return;
-            if (e.key === "Control" || e.key === "Meta") {
+            if (isSelectionModifier(e.key)) {
                 overlayEl.style.pointerEvents = "auto";
             }
         });
 
         document.addEventListener("keyup", (e) => {
             if (!overlayEl) return;
-            if (e.key === "Control" || e.key === "Meta") {
-                overlayEl.style.pointerEvents = "none";
+            if (isSelectionModifier(e.key)) {
+                // Only disable if no other selection modifier is still held
+                if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
+                    overlayEl.style.pointerEvents = "none";
+                    resetDragState();
+                }
             }
         });
 
         // Safety: reset if window loses focus while modifier held
         window.addEventListener("blur", () => {
             if (overlayEl) overlayEl.style.pointerEvents = "none";
+            resetDragState();
         });
     }
 
@@ -554,6 +720,20 @@
         }
         updatePanel();
         saveSelection();
+    }
+
+    /** Select a chunk (no-op if already selected). Does NOT save — caller batches saves. */
+    function selectChunk(key, chunkX, chunkZ) {
+        if (selection.has(key)) return;
+        selection.add(key);
+        addSelectionMesh(key, chunkX, chunkZ);
+    }
+
+    /** Deselect a chunk (no-op if not selected). Does NOT save — caller batches saves. */
+    function deselectChunk(key) {
+        if (!selection.has(key)) return;
+        selection.delete(key);
+        removeSelectionMesh(key);
     }
 
     // ── Selection Meshes (Three.js) ────────────────────────────
@@ -772,7 +952,7 @@
         panelEl.innerHTML = `
             <div class="ct-header">Chunk Trimmer</div>
             <div class="ct-dimension" id="ct-dimension"></div>
-            <div class="ct-info">Ctrl+click to select chunks</div>
+            <div class="ct-info">Ctrl+click/drag to select &bull; Shift+drag for area</div>
             <div class="ct-count">Selected: <span id="ct-count-num">0</span></div>
             <div class="ct-hover-info" id="ct-hover-info"></div>
             <div class="ct-buttons">
