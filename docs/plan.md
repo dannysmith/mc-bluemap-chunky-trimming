@@ -2,7 +2,7 @@
 
 ## Context
 
-Danny has a Minecraft server with years of accumulated chunks and no trimming. He wants a BlueMap addon that shows player activity per chunk, detects player-modified chunks, and lets you visually select chunks for trimming — all from the BlueMap web interface.
+Danny has a Minecraft server with years of accumulated chunks and no trimming. He wants a BlueMap addon that shows player activity per chunk and lets you visually select chunks for trimming — all from the BlueMap web interface.
 
 Nothing like this exists for any Minecraft web map platform. The APIs are well-suited to the job. See `research.md` for full findings.
 
@@ -11,8 +11,7 @@ Nothing like this exists for any Minecraft web map platform. The APIs are well-s
 Build visualization and selection layers only. No deletion/trimming integration yet.
 
 1. **InhabitedTime heatmap overlay** — color-coded chunks on the map
-2. **Player-modified overlay** — block palette + tile entity heuristics
-3. **Interactive chunk selection** — Ctrl/Cmd+click to select/deselect
+2. **Interactive chunk selection** — Ctrl/Cmd+click to select/deselect
 4. **Persist & export selections** — save chunk coordinates for future deletion (method TBD)
 
 ## Architecture
@@ -42,13 +41,13 @@ All code compiles and the shadow JAR builds (121KB).
 | `build.gradle` + `settings.gradle` | Done | Gradle (not Maven — Maven wasn't available). Java 21 target (BlueMapAPI 2.7.7 requires it). Shadow plugin with Querz NBT relocated to `dev.danny.chunktrimmer.lib.querz`. |
 | `bluemap.addon.json` | Done | id: `chunk-trimmer`, entrypoint: `dev.danny.chunktrimmer.ChunkTrimmerAddon` |
 | `ChunkTrimmerAddon.java` | Done | Entrypoint. Registers onEnable/onDisable. Loads config + cached scan, kicks off background rescan thread. Has `TODO` comments where Phase 2 overlay code plugs in. |
-| `Config.java` | Done | JSON config (not HOCON — kept it simple). Settings: `worldRegionPath` (override), `overlayY`, `extraPlayerBlocks`. |
+| `Config.java` | Done | JSON config (not HOCON — kept it simple). Settings: `worldRegionPath` (override), `overlayY`. |
 | `ChunkAnalysis.java` | Done | Java record with helper methods (`inhabitedTimeFormatted()`, `key()`, etc.) |
-| `BlockClassifier.java` | Done | 150+ block IDs in default set. Covers storage, crafting, redstone, rails, signs, concrete, glazed terracotta, stripped logs, glass, torches, etc. |
+| `BlockClassifier.java` | Removed | Was used for player-modified detection; removed due to unreliable false positives from generated structures. |
 | `RegionFileReader.java` | Done | **Custom .mca reader** — reads raw region file bytes, decompresses chunks, parses NBT via `NBTDeserializer`. Completely bypasses Querz NBT's broken `MCAFile`/`Chunk` classes. |
-| `ChunkScanner.java` | Done | Iterates region files via RegionFileReader. Branches on `DataVersion >= 2844` for 1.18+ format. Extracts InhabitedTime, scans block palettes (palette-only, no block data), counts tile entities. |
-| `ScanResult.java` | Done | Wrapper with summary stats (`chunksWithActivity()`, `chunksWithPlayerBlocks()`) |
-| `ScanCache.java` | Done | JSON persistence with compact keys (`it`, `pb`, `te`, `pbt`). Custom Gson adapter. |
+| `ChunkScanner.java` | Done | Iterates region files via RegionFileReader. Branches on `DataVersion >= 2844` for 1.18+ format. Extracts InhabitedTime. |
+| `ScanResult.java` | Done | Wrapper with summary stats (`chunksWithActivity()`) |
+| `ScanCache.java` | Done | JSON persistence with compact keys (`it`). Custom Gson adapter. |
 
 **Key decisions made during implementation:**
 - **Gradle instead of Maven** — Maven wasn't installed and couldn't be installed (Xcode license issue). Gradle wrapper generated from a downloaded distribution.
@@ -61,11 +60,10 @@ All code compiles and the shadow JAR builds (121KB).
 ### Phase 2: BlueMap Overlays — DONE
 
 **2.1 OverlayManager**
-- Creates three MarkerSets on each BlueMap map:
+- Creates MarkerSets on each BlueMap map:
   - `"chunk-trimmer-heatmap"` — "Inhabited Time" — toggleable, default hidden
-  - `"chunk-trimmer-modified"` — "Player Modified" — toggleable, default hidden
   - `"chunk-trimmer-selection"` — "Selected for Trimming" — toggleable, default visible
-- Populates heatmap and modified MarkerSets from scan data
+- Populates heatmap MarkerSet from scan data
 - Selection MarkerSet updated when selection changes
 
 **2.2 HeatmapColors**
@@ -77,13 +75,7 @@ All code compiles and the shadow JAR builds (121KB).
   - 72000+ (1+ hour): red, higher opacity
 - Linear interpolation between thresholds
 
-**2.3 ModifiedColors**
-- Combines signals into confidence levels:
-  - `hasPlayerBlocks && inhabitedTime > threshold`: green (definitely keep)
-  - `hasPlayerBlocks || tileEntityCount > threshold`: yellow (uncertain)
-  - Just `inhabitedTime > 0`: no overlay (explored but unmodified)
-
-**2.4 Marker creation**
+**2.3 Marker creation**
 - One `ShapeMarker` per qualifying chunk:
   - `Shape.createRect(new Vector2d(chunkX*16, chunkZ*16), new Vector2d((chunkX+1)*16, (chunkZ+1)*16))`
   - `depthTestEnabled(false)` so always visible
@@ -91,9 +83,9 @@ All code compiles and the shadow JAR builds (121KB).
 - Skip chunks with InhabitedTime = 0 (vast majority — biggest perf optimization)
 - Create markers on background thread (BlueMapAPI is thread-safe)
 
-**2.5 DataExporter**
+**2.4 DataExporter**
 - Writes compact JSON to BlueMap's `AssetStorage` per map
-- Format: `{ "scanTimestamp": ..., "world": "...", "chunks": { "x,z": { "it": ticks, "te": count, "pb": bool }, ... } }`
+- Format: `{ "scanTimestamp": ..., "world": "...", "chunks": { "x,z": { "it": ticks }, ... } }`
 - Web addon fetches this file on load
 
 **Where to plug in:** `ChunkTrimmerAddon.java` has two `TODO` comments marking where overlay code goes — one after loading cached data (instant overlays) and one after the background rescan completes (refresh overlays).

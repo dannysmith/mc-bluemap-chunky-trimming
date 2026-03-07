@@ -110,18 +110,6 @@ public class ScanCache {
             obj.addProperty("x", src.chunkX());
             obj.addProperty("z", src.chunkZ());
             obj.addProperty("it", src.inhabitedTime());
-            obj.addProperty("pb", src.hasPlayerBlocks());
-            obj.addProperty("te", src.tileEntityCount());
-
-            if (!src.playerBlockTypes().isEmpty()) {
-                JsonArray types = new JsonArray();
-                for (String type : src.playerBlockTypes()) {
-                    // Strip "minecraft:" prefix for compactness
-                    types.add(type.startsWith("minecraft:") ? type.substring(10) : type);
-                }
-                obj.add("pbt", types);
-            }
-
             return obj;
         }
 
@@ -130,21 +118,10 @@ public class ScanCache {
                 throws JsonParseException {
             JsonObject obj = json.getAsJsonObject();
 
-            Set<String> playerBlockTypes = new HashSet<>();
-            if (obj.has("pbt")) {
-                for (JsonElement el : obj.getAsJsonArray("pbt")) {
-                    String name = el.getAsString();
-                    playerBlockTypes.add(name.contains(":") ? name : "minecraft:" + name);
-                }
-            }
-
             return new ChunkAnalysis(
                     obj.get("x").getAsInt(),
                     obj.get("z").getAsInt(),
-                    obj.get("it").getAsLong(),
-                    obj.get("pb").getAsBoolean(),
-                    playerBlockTypes,
-                    obj.get("te").getAsInt()
+                    obj.get("it").getAsLong()
             );
         }
     }

@@ -5,7 +5,6 @@ import com.google.gson.*;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.*;
 
 /**
  * Addon configuration. Stored as JSON in the config directory.
@@ -17,11 +16,7 @@ public class Config {
     /** Y level at which to render overlay markers. */
     private float overlayY = 64f;
 
-    /** Additional player block IDs beyond the default set. */
-    private Set<String> extraPlayerBlocks = Set.of();
-
     public float getOverlayY() { return overlayY; }
-    public Set<String> getExtraPlayerBlocks() { return extraPlayerBlocks; }
 
     /**
      * Loads config from the given directory, creating a default if none exists.
@@ -42,13 +37,6 @@ public class Config {
             if (root.has("overlayY")) {
                 config.overlayY = root.get("overlayY").getAsFloat();
             }
-            if (root.has("extraPlayerBlocks")) {
-                Set<String> extra = new HashSet<>();
-                for (JsonElement el : root.getAsJsonArray("extraPlayerBlocks")) {
-                    extra.add(el.getAsString());
-                }
-                config.extraPlayerBlocks = extra;
-            }
 
             return config;
         } catch (Exception e) {
@@ -64,12 +52,6 @@ public class Config {
 
             JsonObject root = new JsonObject();
             root.addProperty("overlayY", overlayY);
-
-            JsonArray blocks = new JsonArray();
-            for (String block : extraPlayerBlocks) {
-                blocks.add(block);
-            }
-            root.add("extraPlayerBlocks", blocks);
 
             try (Writer writer = Files.newBufferedWriter(configFile)) {
                 new GsonBuilder().setPrettyPrinting().create().toJson(root, writer);

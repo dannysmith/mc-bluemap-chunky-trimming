@@ -3,7 +3,10 @@ package dev.danny.chunktrimmer;
 import de.bluecolored.bluemap.api.BlueMapAPI;
 import de.bluecolored.bluemap.api.BlueMapWorld;
 import dev.danny.chunktrimmer.overlay.OverlayManager;
-import dev.danny.chunktrimmer.scanner.*;
+import dev.danny.chunktrimmer.scanner.ChunkAnalysis;
+import dev.danny.chunktrimmer.scanner.ChunkScanner;
+import dev.danny.chunktrimmer.scanner.ScanCache;
+import dev.danny.chunktrimmer.scanner.ScanResult;
 import dev.danny.chunktrimmer.web.DataExporter;
 import dev.danny.chunktrimmer.web.WebAddonInstaller;
 import net.querz.nbt.io.NBTDeserializer;
@@ -37,7 +40,6 @@ public class ChunkTrimmerAddon implements Runnable {
 
         Config config = Config.load(configDir);
         ScanCache cache = new ScanCache(configDir);
-        BlockClassifier classifier = BlockClassifier.withExtra(config.getExtraPlayerBlocks());
         OverlayManager overlays = new OverlayManager(config.getOverlayY());
         DataExporter exporter = new DataExporter();
 
@@ -70,7 +72,7 @@ public class ChunkTrimmerAddon implements Runnable {
                         worldRegions.size() + " world(s)");
                 long startTime = System.currentTimeMillis();
 
-                ChunkScanner scanner = new ChunkScanner(classifier);
+                ChunkScanner scanner = new ChunkScanner();
                 Map<BlueMapWorld, ScanResult> results = new LinkedHashMap<>();
 
                 for (Map.Entry<BlueMapWorld, Path> entry : worldRegions.entrySet()) {
@@ -192,7 +194,6 @@ public class ChunkTrimmerAddon implements Runnable {
     private void logScanSummary(String worldId, ScanResult result) {
         System.out.println("[ChunkTrimmer] World '" + worldId + "': " +
                 result.totalChunks() + " chunks, " +
-                result.chunksWithActivity() + " with activity, " +
-                result.chunksWithPlayerBlocks() + " with player blocks");
+                result.chunksWithActivity() + " with activity");
     }
 }

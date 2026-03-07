@@ -75,7 +75,7 @@ public class DataExporter {
             boolean firstChunk = true;
             for (ChunkAnalysis chunk : result.chunks().values()) {
                 // Skip chunks with zero activity — web addon doesn't need them
-                if (chunk.inhabitedTime() == 0 && !chunk.hasPlayerBlocks() && chunk.tileEntityCount() == 0) {
+                if (chunk.inhabitedTime() == 0) {
                     continue;
                 }
 
@@ -84,8 +84,6 @@ public class DataExporter {
 
                 sb.append("\"").append(chunk.chunkX()).append(",").append(chunk.chunkZ()).append("\":{");
                 sb.append("\"it\":").append(chunk.inhabitedTime());
-                sb.append(",\"te\":").append(chunk.tileEntityCount());
-                sb.append(",\"pb\":").append(chunk.hasPlayerBlocks());
                 sb.append('}');
             }
 

@@ -20,10 +20,4 @@ public record ScanResult(
                 .filter(c -> c.inhabitedTime() > 0)
                 .count();
     }
-
-    public long chunksWithPlayerBlocks() {
-        return chunks.values().stream()
-                .filter(ChunkAnalysis::hasPlayerBlocks)
-                .count();
-    }
 }

@@ -275,8 +275,7 @@
         try {
             if (obj.data && typeof obj.data.label === "string") {
                 var label = obj.data.label;
-                return label.indexOf("Inhabited Time") >= 0 ||
-                       label.indexOf("Player Modified") >= 0;
+                return label.indexOf("Inhabited Time") >= 0;
             }
         } catch (e) {}
         return false;
@@ -847,8 +846,6 @@
             var chunk = getChunkData(key);
             if (chunk) {
                 entry.inhabitedTime = chunk.it;
-                entry.tileEntities = chunk.te;
-                entry.hasPlayerBlocks = chunk.pb;
             }
             return entry;
         });

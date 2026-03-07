@@ -1,25 +1,13 @@
 package dev.danny.chunktrimmer.scanner;
 
-import java.util.Collections;
-import java.util.Set;
-
 /**
  * Analysis data for a single chunk.
  */
 public record ChunkAnalysis(
         int chunkX,
         int chunkZ,
-        long inhabitedTime,
-        boolean hasPlayerBlocks,
-        Set<String> playerBlockTypes,
-        int tileEntityCount
+        long inhabitedTime
 ) {
-    public ChunkAnalysis {
-        playerBlockTypes = playerBlockTypes != null
-                ? Collections.unmodifiableSet(playerBlockTypes)
-                : Set.of();
-    }
-
     /** InhabitedTime converted to seconds. */
     public double inhabitedSeconds() {
         return inhabitedTime / 20.0;
