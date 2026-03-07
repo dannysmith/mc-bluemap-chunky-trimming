@@ -868,12 +868,15 @@
         download(json, "chunk-selection-" + wid + ".json", "application/json");
     }
 
-    function exportCSV() {
+    function exportMCASelectorCSV() {
         var wid = currentWorldId || "unknown";
-        var csv = "# dimension: " + wid + "\n";
-        csv += "chunkX,chunkZ\n";
+        var csv = "";
         for (var key of selection) {
-            csv += key.replace(",", ",") + "\n";
+            var parts = key.split(",").map(Number);
+            var cx = parts[0], cz = parts[1];
+            var rx = Math.floor(cx / 32), rz = Math.floor(cz / 32);
+            // MCA Selector format: regionX;regionZ;chunkX;chunkZ
+            csv += rx + ";" + rz + ";" + cx + ";" + cz + "\n";
         }
         download(csv, "chunk-selection-" + wid + ".csv", "text/csv");
     }
@@ -958,7 +961,7 @@
             <div class="ct-buttons">
                 <button id="ct-clear">Clear All</button>
                 <button id="ct-export-json">Export JSON</button>
-                <button id="ct-export-csv">Export CSV</button>
+                <button id="ct-export-csv" title="Export as MCA Selector selection file (semicolon-delimited CSV)">Export CSV (MCA Selector)</button>
             </div>
         `;
         document.body.appendChild(panelEl);
@@ -973,7 +976,7 @@
         });
 
         panelEl.querySelector("#ct-export-json").addEventListener("click", exportJSON);
-        panelEl.querySelector("#ct-export-csv").addEventListener("click", exportCSV);
+        panelEl.querySelector("#ct-export-csv").addEventListener("click", exportMCASelectorCSV);
     }
 
     function updatePanel() {
