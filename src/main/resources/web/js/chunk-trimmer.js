@@ -80,13 +80,21 @@
                 // for export enrichment (keyed by "x,z")
                 const allChunks = {};
                 const worlds = data.worlds || {};
+                const mapToWorld = {};
                 let totalChunks = 0;
                 for (const worldId of Object.keys(worlds)) {
-                    const worldChunks = worlds[worldId].chunks || {};
+                    const world = worlds[worldId];
+                    const worldChunks = world.chunks || {};
                     Object.assign(allChunks, worldChunks);
                     totalChunks += Object.keys(worldChunks).length;
+                    // Build map ID → world ID index for world-aware lookups
+                    if (world.mapIds) {
+                        for (var i = 0; i < world.mapIds.length; i++) {
+                            mapToWorld[world.mapIds[i]] = worldId;
+                        }
+                    }
                 }
-                scanData = { worlds: worlds, chunks: allChunks };
+                scanData = { worlds: worlds, chunks: allChunks, mapToWorld: mapToWorld };
                 console.log(
                     "[ChunkTrimmer] Loaded scan data: " +
                         totalChunks + " chunks across " +
@@ -205,6 +213,22 @@
         document.addEventListener("mousemove", onHoverMove);
     }
 
+    /**
+     * Looks up chunk data for the currently viewed map's world.
+     * Falls back to flattened cross-world data if the map can't be resolved.
+     */
+    function getChunkData(key) {
+        if (!scanData) return null;
+        try {
+            var mapId = app.mapViewer.map.data.id;
+            var worldId = scanData.mapToWorld[mapId];
+            if (worldId && scanData.worlds[worldId]) {
+                return scanData.worlds[worldId].chunks[key] || null;
+            }
+        } catch (e) {}
+        return scanData.chunks[key] || null;
+    }
+
     function onHoverMove(e) {
         if (!scanData || !hudEl) {
             hideHud();
@@ -233,8 +257,8 @@
         if (key === lastHoverKey) return;
         lastHoverKey = key;
 
-        const chunk = scanData.chunks[key];
-        if (!chunk || !chunk.it) {
+        const chunk = getChunkData(key);
+        if (!chunk || chunk.it < 20) {
             hideHud();
             return;
         }

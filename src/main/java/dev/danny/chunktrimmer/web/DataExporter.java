@@ -1,6 +1,7 @@
 package dev.danny.chunktrimmer.web;
 
 import de.bluecolored.bluemap.api.BlueMapAPI;
+import de.bluecolored.bluemap.api.BlueMapMap;
 import de.bluecolored.bluemap.api.BlueMapWorld;
 import dev.danny.chunktrimmer.scanner.ChunkAnalysis;
 import dev.danny.chunktrimmer.scanner.ScanResult;
@@ -55,6 +56,17 @@ public class DataExporter {
             sb.append("\"").append(escapeJson(world.getId())).append("\":{");
             sb.append("\"name\":\"").append(escapeJson(result.worldName())).append("\"");
             sb.append(",\"scanTimestamp\":").append(result.scanTimestamp());
+
+            // Map IDs for this world — lets the web addon resolve current map → world
+            sb.append(",\"mapIds\":[");
+            boolean firstMap = true;
+            for (BlueMapMap map : world.getMaps()) {
+                if (!firstMap) sb.append(',');
+                firstMap = false;
+                sb.append("\"").append(escapeJson(map.getId())).append("\"");
+            }
+            sb.append("]");
+
             sb.append(",\"chunks\":{");
 
             boolean firstChunk = true;

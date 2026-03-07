@@ -36,7 +36,7 @@ public class HeatmapColors {
      * Returns null if inhabitedTime is 0 (skip rendering).
      */
     public static Color colorFor(long inhabitedTime) {
-        if (inhabitedTime <= 0) return null;
+        if (inhabitedTime < 20) return null;  // skip sub-second activity
 
         // Clamp to last threshold
         if (inhabitedTime >= THRESHOLDS[THRESHOLDS.length - 1]) {
@@ -67,7 +67,7 @@ public class HeatmapColors {
      * Returns a line (border) color — same hue but fully opaque.
      */
     public static Color lineColorFor(long inhabitedTime) {
-        if (inhabitedTime <= 0) return null;
+        if (inhabitedTime < 20) return null;
 
         if (inhabitedTime >= THRESHOLDS[THRESHOLDS.length - 1]) {
             int[] c = RGB[RGB.length - 1];
