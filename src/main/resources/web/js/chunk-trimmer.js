@@ -24,6 +24,7 @@
     let currentWorldId = null;
     let lastMapId = null;
     let heatmapVisible = true;
+    let inFlatView = true;
 
     // Three.js objects for selection overlay
     const selectionMeshes = new Map(); // "x,z" -> Mesh
@@ -100,6 +101,13 @@
             currentWorldId = wid;
             if (!selections[wid]) selections[wid] = new Set();
             selection = selections[wid];
+        }
+
+        // Hide UI immediately if not in flat mode
+        inFlatView = isFlatView();
+        if (!inFlatView) {
+            if (toggleBtn) toggleBtn.style.display = "none";
+            if (spacerEl) spacerEl.style.display = "none";
         }
 
         fetchScanData();
@@ -213,6 +221,11 @@
                 saveSelection();
             }
             heatmapVisible = checkHeatmapVisible();
+            var flat = isFlatView();
+            if (flat !== inFlatView) onViewModeChanged(flat);
+            // Keep hiding our markers each cycle in non-flat mode,
+            // in case BlueMap re-enabled them (e.g. sidebar toggle click)
+            if (!inFlatView) setOurMarkersVisible(false);
         }, 500);
     }
 
@@ -242,6 +255,62 @@
                 obj.data.label.indexOf("Inhabited Time") >= 0) return true;
         } catch (e) {}
         return false;
+    }
+
+    // ── Flat View Gating ─────────────────────────────────────
+
+    function isFlatView() {
+        try {
+            var hash = window.location.hash;
+            if (hash) return hash.substring(1).split(":")[0] === "flat";
+        } catch (e) {}
+        return true;
+    }
+
+    function isOurMarkerSet(obj) {
+        try {
+            if (obj.data && typeof obj.data.label === "string") {
+                var label = obj.data.label;
+                return label.indexOf("Inhabited Time") >= 0 ||
+                       label.indexOf("Player Modified") >= 0;
+            }
+        } catch (e) {}
+        return false;
+    }
+
+    function setOurMarkersVisible(visible) {
+        try {
+            var root = app.mapViewer.markers;
+            for (var i = 0; i < root.children.length; i++) {
+                var child = root.children[i];
+                if (child === selectionGroup) continue;
+                if (isOurMarkerSet(child)) { child.visible = visible; continue; }
+                for (var j = 0; j < child.children.length; j++) {
+                    if (isOurMarkerSet(child.children[j])) {
+                        child.children[j].visible = visible;
+                    }
+                }
+            }
+        } catch (e) {}
+    }
+
+    function onViewModeChanged(flat) {
+        inFlatView = flat;
+        if (flat) {
+            if (toggleBtn) toggleBtn.style.display = "";
+            if (spacerEl) spacerEl.style.display = "";
+            if (active && panelEl) panelEl.style.display = "block";
+            if (active) rebuildAllMeshes();
+            setOurMarkersVisible(true);
+        } else {
+            if (toggleBtn) toggleBtn.style.display = "none";
+            if (spacerEl) spacerEl.style.display = "none";
+            if (panelEl) panelEl.style.display = "none";
+            if (overlayEl) overlayEl.style.pointerEvents = "none";
+            clearSelectionMeshes();
+            setOurMarkersVisible(false);
+            hideHud();
+        }
     }
 
     // ── Click Handling ─────────────────────────────────────────
@@ -368,7 +437,7 @@
     }
 
     function onHoverMove(e) {
-        if (!scanData || !hudEl || !heatmapVisible) {
+        if (!scanData || !hudEl || !heatmapVisible || !inFlatView) {
             hideHud();
             return;
         }
@@ -601,6 +670,7 @@
     let panelEl = null;
     let countEl = null;
     let toggleBtn = null;
+    let spacerEl = null;
 
     function createUI() {
         createToggleButton();
@@ -640,9 +710,9 @@
                 (el) => el.className === "space thin-hide greedy"
             );
             if (ref) {
-                const spacer = document.createElement("div");
-                spacer.className = "space thin-hide";
-                ref.parentNode.insertBefore(spacer, ref);
+                spacerEl = document.createElement("div");
+                spacerEl.className = "space thin-hide";
+                ref.parentNode.insertBefore(spacerEl, ref);
                 ref.parentNode.insertBefore(toggleBtn, ref);
             } else {
                 cb.appendChild(toggleBtn);
