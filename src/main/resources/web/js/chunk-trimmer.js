@@ -262,7 +262,10 @@
     function isFlatView() {
         try {
             var hash = window.location.hash;
-            if (hash) return hash.substring(1).split(":")[0] === "flat";
+            if (hash) {
+                var parts = hash.substring(1).split(":");
+                return parts[parts.length - 1] === "flat";
+            }
         } catch (e) {}
         return true;
     }
