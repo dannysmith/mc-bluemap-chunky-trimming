@@ -56,6 +56,9 @@ public class DataExporter {
             sb.append("\"").append(escapeJson(world.getId())).append("\":{");
             sb.append("\"name\":\"").append(escapeJson(result.worldName())).append("\"");
             sb.append(",\"scanTimestamp\":").append(result.scanTimestamp());
+            if (result.seed() != null) {
+                sb.append(",\"seed\":").append(result.seed());
+            }
 
             // Map IDs for this world — lets the web addon resolve current map → world
             sb.append(",\"mapIds\":[");

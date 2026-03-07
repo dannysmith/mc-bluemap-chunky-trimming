@@ -510,6 +510,9 @@
         };
         if (scanData && scanData.worlds[wid]) {
             output.worldName = scanData.worlds[wid].name;
+            if (scanData.worlds[wid].seed != null) {
+                output.worldSeed = scanData.worlds[wid].seed;
+            }
         }
 
         var json = JSON.stringify(output, null, 2);

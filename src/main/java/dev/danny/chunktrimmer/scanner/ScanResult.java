@@ -8,6 +8,7 @@ import java.util.Map;
 public record ScanResult(
         String worldName,
         long scanTimestamp,
+        Long seed,
         Map<String, ChunkAnalysis> chunks
 ) {
     public int totalChunks() {

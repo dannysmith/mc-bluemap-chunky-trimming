@@ -6,6 +6,8 @@ import dev.danny.chunktrimmer.overlay.OverlayManager;
 import dev.danny.chunktrimmer.scanner.*;
 import dev.danny.chunktrimmer.web.DataExporter;
 import dev.danny.chunktrimmer.web.WebAddonInstaller;
+import net.querz.nbt.io.NBTDeserializer;
+import net.querz.nbt.tag.CompoundTag;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -79,10 +81,12 @@ public class ChunkTrimmerAddon implements Runnable {
                             "' at " + regionDir);
 
                     Map<String, ChunkAnalysis> chunks = scanner.scan(regionDir);
+                    Long seed = readWorldSeed(regionDir.getParent());
 
                     ScanResult result = new ScanResult(
                             regionDir.getParent().getFileName().toString(),
                             System.currentTimeMillis(),
+                            seed,
                             chunks
                     );
 
@@ -108,6 +112,40 @@ public class ChunkTrimmerAddon implements Runnable {
 
     private void onDisable(BlueMapAPI api) {
         System.out.println("[ChunkTrimmer] Addon disabled");
+    }
+
+    /**
+     * Reads the world seed from level.dat.
+     * Checks the given directory first, then its parent (handles DIM-1/DIM1 subdirs).
+     */
+    private Long readWorldSeed(Path saveDir) {
+        for (Path dir = saveDir; dir != null; dir = dir.getParent()) {
+            Path levelDat = dir.resolve("level.dat");
+            if (Files.isRegularFile(levelDat)) {
+                try {
+                    CompoundTag root = (CompoundTag) new NBTDeserializer(true)
+                            .fromFile(levelDat.toFile()).getTag();
+                    CompoundTag data = root.getCompoundTag("Data");
+                    if (data == null) return null;
+                    // 1.16+: Data.WorldGenSettings.seed
+                    CompoundTag wgs = data.getCompoundTag("WorldGenSettings");
+                    if (wgs != null && wgs.containsKey("seed")) {
+                        return wgs.getLong("seed");
+                    }
+                    // Older: Data.RandomSeed
+                    if (data.containsKey("RandomSeed")) {
+                        return data.getLong("RandomSeed");
+                    }
+                } catch (Exception e) {
+                    System.err.println("[ChunkTrimmer] Warning: Could not read seed from " +
+                            levelDat + ": " + e.getMessage());
+                }
+                return null;
+            }
+            // Don't traverse above two levels (saveDir and its parent)
+            if (!dir.equals(saveDir)) break;
+        }
+        return null;
     }
 
     /**
