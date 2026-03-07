@@ -18,8 +18,11 @@
     let active = false;
     let scanData = null;
 
-    // Selection: Set of "x,z" strings
-    let selection = new Set();
+    // Selection: per-world sets of "x,z" strings
+    let selections = {};       // worldId -> Set<string>
+    let selection = new Set();  // alias → active world's set
+    let currentWorldId = null;
+    let lastMapId = null;
 
     // Three.js objects for selection overlay
     const selectionMeshes = new Map(); // "x,z" -> Mesh
@@ -64,6 +67,15 @@
         createOverlay();
         createHud();
         loadSelection();
+
+        // Set initial world (may use map ID as fallback before scan data loads)
+        var wid = getCurrentWorldId();
+        if (wid) {
+            currentWorldId = wid;
+            if (!selections[wid]) selections[wid] = new Set();
+            selection = selections[wid];
+        }
+
         fetchScanData();
     }
 
@@ -100,10 +112,81 @@
                         totalChunks + " chunks across " +
                         Object.keys(worlds).length + " world(s)"
                 );
+
+                // Resolve world and start tracking map switches
+                migrateSelectionKeys();
+                var wid = getCurrentWorldId();
+                if (wid) switchToWorld(wid);
+                startMapPolling();
             })
             .catch(() => {
                 console.log("[ChunkTrimmer] No scan data available yet");
             });
+    }
+
+    // ── World Tracking ────────────────────────────────────────
+
+    function getCurrentWorldId() {
+        try {
+            var mapId = app.mapViewer.map.data.id;
+            if (scanData && scanData.mapToWorld[mapId]) {
+                return scanData.mapToWorld[mapId];
+            }
+            return mapId;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function getDimensionLabel(worldId) {
+        var labels = {
+            "overworld": "Overworld",
+            "the_nether": "Nether",
+            "the_end": "The End"
+        };
+        return labels[worldId] || worldId;
+    }
+
+    function switchToWorld(worldId) {
+        if (worldId === currentWorldId) return;
+        currentWorldId = worldId;
+        if (!selections[currentWorldId]) selections[currentWorldId] = new Set();
+        selection = selections[currentWorldId];
+        if (active) {
+            rebuildAllMeshes();
+        }
+        updatePanel();
+    }
+
+    /**
+     * Migrates selection keys that are map IDs to their proper world IDs.
+     * Called after scan data loads so mapToWorld is available.
+     */
+    function migrateSelectionKeys() {
+        if (!scanData) return;
+        var changed = false;
+        for (var key of Object.keys(selections)) {
+            var worldId = scanData.mapToWorld[key];
+            if (worldId && worldId !== key) {
+                if (!selections[worldId]) selections[worldId] = new Set();
+                for (var chunk of selections[key]) {
+                    selections[worldId].add(chunk);
+                }
+                delete selections[key];
+                changed = true;
+            }
+        }
+        if (changed) saveSelection();
+    }
+
+    function startMapPolling() {
+        setInterval(function () {
+            var wid = getCurrentWorldId();
+            if (wid && wid !== currentWorldId) {
+                switchToWorld(wid);
+                saveSelection();
+            }
+        }, 500);
     }
 
     // ── Click Handling ─────────────────────────────────────────
@@ -368,9 +451,12 @@
 
     function saveSelection() {
         try {
-            const data = {
-                chunks: Array.from(selection),
-            };
+            var data = { worlds: {} };
+            for (var wid of Object.keys(selections)) {
+                if (selections[wid].size > 0) {
+                    data.worlds[wid] = Array.from(selections[wid]);
+                }
+            }
             localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
         } catch (e) {
             // localStorage full or unavailable
@@ -379,11 +465,23 @@
 
     function loadSelection() {
         try {
-            const raw = localStorage.getItem(STORAGE_KEY);
+            var raw = localStorage.getItem(STORAGE_KEY);
             if (!raw) return;
-            const data = JSON.parse(raw);
+            var data = JSON.parse(raw);
+
+            // New world-keyed format: { worlds: { worldId: [...], ... } }
+            if (data.worlds) {
+                for (var wid of Object.keys(data.worlds)) {
+                    selections[wid] = new Set(data.worlds[wid]);
+                }
+                return;
+            }
+
+            // Old flat format: { chunks: [...] }
+            // Assign to current world (best effort; migrated later when scan data loads)
             if (data.chunks && Array.isArray(data.chunks)) {
-                selection = new Set(data.chunks);
+                var wid = getCurrentWorldId() || "__unknown__";
+                selections[wid] = new Set(data.chunks);
             }
         } catch (e) {
             // corrupt data, ignore
@@ -393,29 +491,39 @@
     // ── Export ──────────────────────────────────────────────────
 
     function exportJSON() {
-        const chunks = Array.from(selection).map((key) => {
-            const [x, z] = key.split(",").map(Number);
-            const entry = { chunkX: x, chunkZ: z };
-            // Include scan data if available
-            if (scanData && scanData.chunks && scanData.chunks[key]) {
-                const sd = scanData.chunks[key];
-                entry.inhabitedTime = sd.it;
-                entry.tileEntities = sd.te;
-                entry.hasPlayerBlocks = sd.pb;
+        var wid = currentWorldId || "unknown";
+        var chunks = Array.from(selection).map(function (key) {
+            var parts = key.split(",").map(Number);
+            var entry = { chunkX: parts[0], chunkZ: parts[1] };
+            var chunk = getChunkData(key);
+            if (chunk) {
+                entry.inhabitedTime = chunk.it;
+                entry.tileEntities = chunk.te;
+                entry.hasPlayerBlocks = chunk.pb;
             }
             return entry;
         });
 
-        const json = JSON.stringify({ chunks: chunks }, null, 2);
-        download(json, "chunk-selection.json", "application/json");
+        var output = {
+            dimension: wid,
+            chunks: chunks
+        };
+        if (scanData && scanData.worlds[wid]) {
+            output.worldName = scanData.worlds[wid].name;
+        }
+
+        var json = JSON.stringify(output, null, 2);
+        download(json, "chunk-selection-" + wid + ".json", "application/json");
     }
 
     function exportCSV() {
-        let csv = "chunkX,chunkZ\n";
-        for (const key of selection) {
+        var wid = currentWorldId || "unknown";
+        var csv = "# dimension: " + wid + "\n";
+        csv += "chunkX,chunkZ\n";
+        for (var key of selection) {
             csv += key.replace(",", ",") + "\n";
         }
-        download(csv, "chunk-selection.csv", "text/csv");
+        download(csv, "chunk-selection-" + wid + ".csv", "text/csv");
     }
 
     function download(content, filename, mimeType) {
@@ -490,6 +598,7 @@
         panelEl.style.display = "none";
         panelEl.innerHTML = `
             <div class="ct-header">Chunk Trimmer</div>
+            <div class="ct-dimension" id="ct-dimension"></div>
             <div class="ct-info">Ctrl+click to select chunks</div>
             <div class="ct-count">Selected: <span id="ct-count-num">0</span></div>
             <div class="ct-hover-info" id="ct-hover-info"></div>
@@ -517,6 +626,10 @@
     function updatePanel() {
         if (countEl) {
             countEl.textContent = selection.size;
+        }
+        var dimEl = document.getElementById("ct-dimension");
+        if (dimEl) {
+            dimEl.textContent = currentWorldId ? getDimensionLabel(currentWorldId) : "";
         }
     }
 

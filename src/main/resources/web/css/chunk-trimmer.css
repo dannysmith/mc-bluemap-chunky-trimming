@@ -24,6 +24,13 @@
     color: #fff;
 }
 
+.ct-dimension {
+    font-size: 12px;
+    color: #e64a19;
+    font-weight: 500;
+    margin-bottom: 6px;
+}
+
 .ct-info {
     font-size: 11px;
     color: #999;
