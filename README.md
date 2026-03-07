@@ -8,6 +8,8 @@ Both features are only available in BlueMap's flat (2D) view.
 
 ## Heatmap Overlay
 
+<img width="1920" height="957" alt="bluemap-playertijme-heatmap" src="https://github.com/user-attachments/assets/1728f2d4-257b-4c23-93cb-87cb5f111042" />
+
 The heatmap shows cumulative player activity per chunk. Each chunk that's been inhabited for more than 1 second gets a colored overlay, with the color indicating how much total time players have spent there. Colors blend smoothly between these thresholds:
 
 - **Blue** — under 1 minute of activity
@@ -22,6 +24,8 @@ The heatmap renders as a set of BlueMap marker overlays that you can toggle on a
 When the heatmap is visible, a small HUD appears at the bottom of the screen as you move your cursor. It shows the chunk coordinates, the inhabited time in a human-readable format (e.g. "2h 15m"), and the exact tick count underneath.
 
 ## Chunk Selector
+
+<img width="1210" height="805" alt="bluemap-chunk-selector" src="https://github.com/user-attachments/assets/b794cd9b-986e-439c-aa01-8d41db1ab3f1" />
 
 The chunk selector lets you visually pick chunks on the map for export. Enable it by clicking the chunk trimmer icon in the top-left toolbar (only visible in flat view).
 
