@@ -25,6 +25,7 @@
     let lastMapId = null;
     let heatmapVisible = true;
     let inFlatView = true;
+    let savedMarkerVisibility = {}; // label -> boolean, saved when leaving flat
 
     // Three.js objects for selection overlay
     const selectionMeshes = new Map(); // "x,z" -> Mesh
@@ -297,6 +298,46 @@
         } catch (e) {}
     }
 
+    /** Save current .visible state of our marker sets before we override them. */
+    function saveOurMarkerVisibility() {
+        try {
+            var root = app.mapViewer.markers;
+            for (var i = 0; i < root.children.length; i++) {
+                var child = root.children[i];
+                if (child === selectionGroup) continue;
+                if (isOurMarkerSet(child)) {
+                    savedMarkerVisibility[child.data.label] = child.visible;
+                    continue;
+                }
+                for (var j = 0; j < child.children.length; j++) {
+                    if (isOurMarkerSet(child.children[j])) {
+                        savedMarkerVisibility[child.children[j].data.label] = child.children[j].visible;
+                    }
+                }
+            }
+        } catch (e) {}
+    }
+
+    /** Restore saved .visible state, defaulting to true if no saved state. */
+    function restoreOurMarkerVisibility() {
+        try {
+            var root = app.mapViewer.markers;
+            for (var i = 0; i < root.children.length; i++) {
+                var child = root.children[i];
+                if (child === selectionGroup) continue;
+                if (isOurMarkerSet(child)) {
+                    child.visible = savedMarkerVisibility[child.data.label] !== false;
+                    continue;
+                }
+                for (var j = 0; j < child.children.length; j++) {
+                    if (isOurMarkerSet(child.children[j])) {
+                        child.children[j].visible = savedMarkerVisibility[child.children[j].data.label] !== false;
+                    }
+                }
+            }
+        } catch (e) {}
+    }
+
     function onViewModeChanged(flat) {
         inFlatView = flat;
         if (flat) {
@@ -304,13 +345,14 @@
             if (spacerEl) spacerEl.style.display = "";
             if (active && panelEl) panelEl.style.display = "block";
             if (active) rebuildAllMeshes();
-            setOurMarkersVisible(true);
+            restoreOurMarkerVisibility();
         } else {
             if (toggleBtn) toggleBtn.style.display = "none";
             if (spacerEl) spacerEl.style.display = "none";
             if (panelEl) panelEl.style.display = "none";
             if (overlayEl) overlayEl.style.pointerEvents = "none";
             clearSelectionMeshes();
+            saveOurMarkerVisibility();
             setOurMarkersVisible(false);
             hideHud();
         }
