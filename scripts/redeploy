@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+#
+# Redeploy script for bluemap-chunk-trimmer.
+# Intended specifically for use on servers managed using dannysmith/mc-infra.
+# Won't work without the tooling which comes with that.
+#
+
+set -euo pipefail
+
+SERVER="${1:-bmdev}"
+JAR_NAME="bluemap-chunk-trimmer-0.1.0.jar"
+DEST="/opt/minecraft/servers/${SERVER}/data/config/bluemap/packs/"
+
+echo "==> Pulling latest changes..."
+git pull
+
+echo "==> Building..."
+./gradlew shadowJar
+
+if [ ! -f "build/libs/${JAR_NAME}" ]; then
+    echo "ERROR: build/libs/${JAR_NAME} not found"
+    exit 1
+fi
+
+if [ ! -d "$DEST" ]; then
+    echo "ERROR: ${DEST} does not exist. Is '${SERVER}' a valid server?"
+    exit 1
+fi
+
+echo "==> Copying ${JAR_NAME} to ${DEST}"
+cp "build/libs/${JAR_NAME}" "$DEST"
+
+if mc-status 2>/dev/null | grep -E "^${SERVER}\b" | grep -qi "running"; then
+    echo "==> Server '${SERVER}' is running. Restarting..."
+    mc-stop "$SERVER" && mc-start "$SERVER"
+    echo ""
+    read -rp "Follow logs? (mc-logs ${SERVER} --follow) [y/N] " answer
+    if [[ "$answer" =~ ^[Yy]$ ]]; then
+        mc-logs "$SERVER" --follow
+    fi
+else
+    echo "==> Server '${SERVER}' is not running. Skipping restart."
+fi
+
+echo "==> Done."
