@@ -38,7 +38,7 @@
 
     const CHUNK_SIZE = 16;
     const OVERLAY_Y = 65;
-    const SELECTION_COLOR = 0x00bcd4; // cyan — distinct from heatmap green/yellow/red
+    const SELECTION_COLOR = 0xff3399; // bright pink — distinct from heatmap blue/yellow/red
     const STORAGE_KEY = "chunk-trimmer-selection";
     const DATA_PATH = "assets/chunk-trimmer/data.json";
 
@@ -69,8 +69,8 @@
 
         ctx.clearRect(0, 0, size, size);
 
-        // Diagonal stripes in cyan
-        ctx.strokeStyle = "rgba(0, 188, 212, 0.55)";
+        // Diagonal stripes in bright pink
+        ctx.strokeStyle = "rgba(255, 51, 153, 0.55)";
         ctx.lineWidth = 7;
         for (var i = -size; i < size * 2; i += 16) {
             ctx.beginPath();

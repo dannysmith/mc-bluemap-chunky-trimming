@@ -10,14 +10,17 @@ Both features are only available in BlueMap's flat (2D) view.
 
 <img width="1920" height="957" alt="bluemap-playertijme-heatmap" src="https://github.com/user-attachments/assets/1728f2d4-257b-4c23-93cb-87cb5f111042" />
 
-The heatmap shows cumulative player activity per chunk. Each chunk that's been inhabited for more than 1 second gets a colored overlay, with the color indicating how much total time players have spent there. Colors blend smoothly between these thresholds:
+The heatmap shows cumulative player activity per chunk. Each chunk that's been inhabited for more than 1 minute gets a colored overlay, with the color indicating how much total time players have spent there. Colors blend smoothly between these thresholds:
 
-- **Blue** — under 1 minute of activity
-- **Teal/cyan** — around 1 minute
-- **Yellow/orange** — around 10 minutes
-- **Red** — 1 hour or more
+- **Faint blue** — 1–5 minutes (just walked through)
+- **Blue** — 5–10 minutes (lingered briefly)
+- **Brighter blue** — 10–30 minutes (spent a bit of time)
+- **Teal/cyan** — 30 minutes – 1 hour (properly explored)
+- **Yellow/amber** — 1–3 hours (significant activity)
+- **Orange** — 3–10 hours (major investment)
+- **Deep red** — 10+ hours (base or major build)
 
-Chunks with less than 1 second of inhabited time don't appear on the heatmap at all, which keeps the map clean — most chunks a player has merely passed through at speed won't show up.
+Chunks with less than 1 minute of inhabited time don't appear on the heatmap at all, which keeps the map clean — chunks that were merely loaded or briefly passed through won't show up.
 
 The heatmap renders as a set of BlueMap marker overlays that you can toggle on and off in the markers panel like any other BlueMap layer.
 
@@ -31,7 +34,7 @@ The chunk selector lets you visually pick chunks on the map for export. Enable i
 
 ### Selecting chunks
 
-- **Ctrl/Cmd + click** a chunk to select or deselect it. Selected chunks appear with a cyan hatched pattern.
+- **Ctrl/Cmd + click** a chunk to select or deselect it. Selected chunks appear with a bright pink hatched pattern.
 - **Ctrl/Cmd + click and drag** to paint across multiple chunks. Whether this selects or deselects depends on the state of the first chunk you click — if it's unselected, dragging selects; if it's already selected, dragging deselects.
 - **Shift  click and drag** to draw a rectangle. All chunks inside the rectangle get selected (or deselected, same logic as above). You'll see a white outline preview of the rectangle as you drag.
 
