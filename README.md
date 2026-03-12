@@ -10,7 +10,7 @@ Both features are only available in BlueMap's flat (2D) view.
 
 <img width="1920" height="957" alt="bluemap-playertijme-heatmap" src="https://github.com/user-attachments/assets/1728f2d4-257b-4c23-93cb-87cb5f111042" />
 
-The heatmap shows cumulative player activity per chunk. Each chunk that's been inhabited for more than 1 minute gets a colored overlay, with the color indicating how much total time players have spent there. Colors blend smoothly between these thresholds:
+The heatmap shows cumulative player activity per chunk. Each chunk that's been inhabited for more than 1 minute gets a colored overlay, with the color indicating how much total time players have spent there. Chunks are colored by tier:
 
 - **Faint blue** — 1–5 minutes (just walked through)
 - **Blue** — 5–10 minutes (lingered briefly)
@@ -22,7 +22,7 @@ The heatmap shows cumulative player activity per chunk. Each chunk that's been i
 
 Chunks with less than 1 minute of inhabited time don't appear on the heatmap at all, which keeps the map clean — chunks that were merely loaded or briefly passed through won't show up.
 
-The heatmap renders as a set of BlueMap marker overlays that you can toggle on and off in the markers panel like any other BlueMap layer.
+The heatmap is rendered client-side using Three.js InstancedMesh for performance. Toggle it on and off using the thermometer icon in the top-left control bar (only visible in flat view).
 
 When the heatmap is visible, a small HUD appears at the bottom of the screen as you move your cursor. It shows the chunk coordinates, the inhabited time in a human-readable format (e.g. "2h 15m"), and the exact tick count underneath.
 

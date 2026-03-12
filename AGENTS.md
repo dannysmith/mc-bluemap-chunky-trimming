@@ -8,7 +8,6 @@ See @docs/tasks.md for task management
 
 - `src/main/java/dev/danny/chunktrimmer/` — Java source (entrypoint: `ChunkTrimmerAddon.java`)
   - `scanner/` — Region file reading, chunk analysis, caching
-  - `overlay/` — BlueMap marker overlay generation (heatmap colors, marker sets)
   - `web/` — Data export to web root + web addon installer
 - `src/main/resources/bluemap.addon.json` — BlueMap addon descriptor
 - `src/main/resources/web/` — Web addon JS/CSS (copied to web root at runtime)
