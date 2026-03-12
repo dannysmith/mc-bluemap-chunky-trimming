@@ -1,8 +1,9 @@
 /**
  * BlueMap Chunk Trimmer — Web Addon
  *
- * Adds interactive chunk selection to BlueMap:
- * - Toggle button in control bar
+ * Adds inhabited time heatmap and interactive chunk selection to BlueMap:
+ * - Heatmap overlay rendered client-side via InstancedMesh (toggle in control bar)
+ * - Chunk selector toggle button in control bar
  * - Ctrl/Cmd+click to select/deselect chunks
  * - Selection panel with count, clear, export
  * - Three.js overlay meshes for selected chunks
@@ -23,9 +24,8 @@
     let selection = new Set();  // alias → active world's set
     let currentWorldId = null;
     let lastMapId = null;
-    let heatmapVisible = true;
+    let heatmapVisible = false; // driven by toggle button
     let inFlatView = true;
-    let savedMarkerVisibility = {}; // label -> boolean, saved when leaving flat
 
     // Three.js objects for selection overlay
     const selectionMeshes = new Map(); // "x,z" -> Mesh
@@ -34,6 +34,10 @@
     let hudEl = null;
     let lastHoverKey = null;
 
+    // Heatmap
+    let heatmapGroup = null;    // THREE.Group containing InstancedMesh objects
+    let heatmapBtn = null;      // toggle button element
+
     // ── Constants ──────────────────────────────────────────────
 
     const CHUNK_SIZE = 16;
@@ -41,6 +45,21 @@
     const SELECTION_COLOR = 0xff3399; // bright pink — distinct from heatmap blue/yellow/red
     const STORAGE_KEY = "chunk-trimmer-selection";
     const DATA_PATH = "assets/chunk-trimmer/data.json";
+
+    // Heatmap color buckets — matches Java HeatmapColors thresholds.
+    // Each chunk is assigned to the first bucket where inhabitedTime < max.
+    // Using discrete buckets with one InstancedMesh per bucket gives us
+    // 7 draw calls instead of 36k+ individual ShapeMarkers.
+    const HEATMAP_MIN_TICKS = 1200; // 1 minute — below this, chunks are invisible
+    const HEATMAP_BUCKETS = [
+        { max: 6000,     r: 77,  g: 128, b: 230, a: 0.12 },  // 1-5m: faint blue
+        { max: 12000,    r: 77,  g: 128, b: 230, a: 0.18 },  // 5-10m: blue
+        { max: 36000,    r: 77,  g: 128, b: 230, a: 0.25 },  // 10-30m: brighter blue
+        { max: 72000,    r: 51,  g: 204, b: 204, a: 0.33 },  // 30m-1h: teal
+        { max: 216000,   r: 230, g: 204, b: 51,  a: 0.42 },  // 1-3h: yellow/amber
+        { max: 720000,   r: 230, g: 120, b: 26,  a: 0.52 },  // 3-10h: orange
+        { max: Infinity, r: 204, g: 30,  b: 20,  a: 0.60 },  // 10h+: deep red
+    ];
 
     // Shared geometry for all selection meshes
     const chunkGeometry = new THREE.PlaneGeometry(CHUNK_SIZE, CHUNK_SIZE);
@@ -113,6 +132,7 @@
         inFlatView = isFlatView();
         if (!inFlatView) {
             if (toggleBtn) toggleBtn.style.display = "none";
+            if (heatmapBtn) heatmapBtn.style.display = "none";
             if (spacerEl) spacerEl.style.display = "none";
         }
 
@@ -158,6 +178,9 @@
                 var wid = getCurrentWorldId();
                 if (wid) switchToWorld(wid);
                 startMapPolling();
+
+                // Build heatmap for initial world
+                if (currentWorldId) buildHeatmap(currentWorldId);
             })
             .catch(() => {
                 console.log("[ChunkTrimmer] No scan data available yet");
@@ -196,6 +219,7 @@
             rebuildAllMeshes();
         }
         updatePanel();
+        buildHeatmap(worldId);
     }
 
     /**
@@ -226,41 +250,9 @@
                 switchToWorld(wid);
                 saveSelection();
             }
-            heatmapVisible = checkHeatmapVisible();
             var flat = isFlatView();
             if (flat !== inFlatView) onViewModeChanged(flat);
-            // Keep hiding our markers each cycle in non-flat mode,
-            // in case BlueMap re-enabled them (e.g. sidebar toggle click)
-            if (!inFlatView) setOurMarkersVisible(false);
         }, 500);
-    }
-
-    /**
-     * Checks if the heatmap marker set is toggled visible in BlueMap's sidebar.
-     * Searches the Three.js scene graph for the marker set by label.
-     */
-    function checkHeatmapVisible() {
-        try {
-            var root = app.mapViewer.markers;
-            for (var i = 0; i < root.children.length; i++) {
-                var child = root.children[i];
-                if (child === selectionGroup) continue;
-                if (isHeatmapSet(child)) return child.visible;
-                // Marker sets may be nested under a marker file manager
-                for (var j = 0; j < child.children.length; j++) {
-                    if (isHeatmapSet(child.children[j])) return child.children[j].visible;
-                }
-            }
-        } catch (e) {}
-        return true;
-    }
-
-    function isHeatmapSet(obj) {
-        try {
-            if (obj.data && typeof obj.data.label === "string" &&
-                obj.data.label.indexOf("Inhabited Time") >= 0) return true;
-        } catch (e) {}
-        return false;
     }
 
     // ── Flat View Gating ─────────────────────────────────────
@@ -276,90 +268,123 @@
         return true;
     }
 
-    function isOurMarkerSet(obj) {
-        try {
-            if (obj.data && typeof obj.data.label === "string") {
-                var label = obj.data.label;
-                return label.indexOf("Inhabited Time") >= 0;
-            }
-        } catch (e) {}
-        return false;
-    }
-
-    function setOurMarkersVisible(visible) {
-        try {
-            var root = app.mapViewer.markers;
-            for (var i = 0; i < root.children.length; i++) {
-                var child = root.children[i];
-                if (child === selectionGroup) continue;
-                if (isOurMarkerSet(child)) { child.visible = visible; continue; }
-                for (var j = 0; j < child.children.length; j++) {
-                    if (isOurMarkerSet(child.children[j])) {
-                        child.children[j].visible = visible;
-                    }
-                }
-            }
-        } catch (e) {}
-    }
-
-    /** Save current .visible state of our marker sets before we override them. */
-    function saveOurMarkerVisibility() {
-        try {
-            var root = app.mapViewer.markers;
-            for (var i = 0; i < root.children.length; i++) {
-                var child = root.children[i];
-                if (child === selectionGroup) continue;
-                if (isOurMarkerSet(child)) {
-                    savedMarkerVisibility[child.data.label] = child.visible;
-                    continue;
-                }
-                for (var j = 0; j < child.children.length; j++) {
-                    if (isOurMarkerSet(child.children[j])) {
-                        savedMarkerVisibility[child.children[j].data.label] = child.children[j].visible;
-                    }
-                }
-            }
-        } catch (e) {}
-    }
-
-    /** Restore saved .visible state, defaulting to true if no saved state. */
-    function restoreOurMarkerVisibility() {
-        try {
-            var root = app.mapViewer.markers;
-            for (var i = 0; i < root.children.length; i++) {
-                var child = root.children[i];
-                if (child === selectionGroup) continue;
-                if (isOurMarkerSet(child)) {
-                    child.visible = savedMarkerVisibility[child.data.label] !== false;
-                    continue;
-                }
-                for (var j = 0; j < child.children.length; j++) {
-                    if (isOurMarkerSet(child.children[j])) {
-                        child.children[j].visible = savedMarkerVisibility[child.children[j].data.label] !== false;
-                    }
-                }
-            }
-        } catch (e) {}
-    }
-
     function onViewModeChanged(flat) {
         inFlatView = flat;
         if (flat) {
             if (toggleBtn) toggleBtn.style.display = "";
+            if (heatmapBtn) heatmapBtn.style.display = "";
             if (spacerEl) spacerEl.style.display = "";
             if (active && panelEl) panelEl.style.display = "block";
             if (active) rebuildAllMeshes();
-            restoreOurMarkerVisibility();
+            if (heatmapGroup) heatmapGroup.visible = heatmapVisible;
         } else {
             if (toggleBtn) toggleBtn.style.display = "none";
+            if (heatmapBtn) heatmapBtn.style.display = "none";
             if (spacerEl) spacerEl.style.display = "none";
             if (panelEl) panelEl.style.display = "none";
             if (overlayEl) overlayEl.style.pointerEvents = "none";
             clearSelectionMeshes();
-            saveOurMarkerVisibility();
-            setOurMarkersVisible(false);
+            if (heatmapGroup) heatmapGroup.visible = false;
             hideHud();
         }
+    }
+
+    // ── Heatmap Rendering ─────────────────────────────────────
+
+    /**
+     * Builds the heatmap overlay for a world using InstancedMesh.
+     * Chunks are sorted into color buckets, one InstancedMesh per bucket.
+     * This gives us ~7 draw calls instead of tens of thousands of individual markers.
+     */
+    function buildHeatmap(worldId) {
+        destroyHeatmap();
+
+        if (!scanData || !scanData.worlds[worldId]) return;
+
+        var chunks = scanData.worlds[worldId].chunks;
+        if (!chunks) return;
+
+        // Sort chunks into buckets
+        var bucketKeys = HEATMAP_BUCKETS.map(function () { return []; });
+
+        var keys = Object.keys(chunks);
+        for (var k = 0; k < keys.length; k++) {
+            var it = chunks[keys[k]].it;
+            if (it < HEATMAP_MIN_TICKS) continue;
+
+            for (var b = 0; b < HEATMAP_BUCKETS.length; b++) {
+                if (it < HEATMAP_BUCKETS[b].max) {
+                    bucketKeys[b].push(keys[k]);
+                    break;
+                }
+            }
+        }
+
+        heatmapGroup = new THREE.Group();
+
+        var dummy = new THREE.Object3D();
+        var totalChunks = 0;
+
+        for (var b = 0; b < HEATMAP_BUCKETS.length; b++) {
+            var bKeys = bucketKeys[b];
+            if (bKeys.length === 0) continue;
+
+            var bucket = HEATMAP_BUCKETS[b];
+            var material = new THREE.MeshBasicMaterial({
+                color: new THREE.Color(bucket.r / 255, bucket.g / 255, bucket.b / 255),
+                transparent: true,
+                opacity: bucket.a,
+                depthTest: false,
+                side: THREE.DoubleSide,
+            });
+
+            var mesh = new THREE.InstancedMesh(chunkGeometry, material, bKeys.length);
+
+            for (var i = 0; i < bKeys.length; i++) {
+                var parts = bKeys[i].split(",");
+                var cx = parseInt(parts[0]);
+                var cz = parseInt(parts[1]);
+                dummy.position.set(
+                    cx * CHUNK_SIZE + CHUNK_SIZE / 2,
+                    OVERLAY_Y,
+                    cz * CHUNK_SIZE + CHUNK_SIZE / 2
+                );
+                dummy.updateMatrix();
+                mesh.setMatrixAt(i, dummy.matrix);
+            }
+
+            mesh.instanceMatrix.needsUpdate = true;
+            mesh.frustumCulled = false;
+            mesh.raycast = function () {}; // prevent interference with BlueMap raycasting
+            heatmapGroup.add(mesh);
+            totalChunks += bKeys.length;
+        }
+
+        heatmapGroup.visible = heatmapVisible && inFlatView;
+        app.mapViewer.markers.add(heatmapGroup);
+
+        console.log("[ChunkTrimmer] Built heatmap: " + totalChunks + " chunks in " +
+            heatmapGroup.children.length + " draw calls");
+    }
+
+    function destroyHeatmap() {
+        if (heatmapGroup) {
+            app.mapViewer.markers.remove(heatmapGroup);
+            // Dispose materials (geometry is shared, don't dispose it)
+            for (var i = 0; i < heatmapGroup.children.length; i++) {
+                var child = heatmapGroup.children[i];
+                if (child.material) child.material.dispose();
+                if (child.instanceMatrix) child.instanceMatrix = null;
+            }
+            heatmapGroup = null;
+        }
+    }
+
+    function toggleHeatmap() {
+        heatmapVisible = !heatmapVisible;
+        if (heatmapBtn) heatmapBtn.classList.toggle("active", heatmapVisible);
+        if (heatmapGroup) heatmapGroup.visible = heatmapVisible && inFlatView;
+        if (!heatmapVisible) hideHud();
     }
 
     // ── Click Handling ─────────────────────────────────────────
@@ -371,11 +396,7 @@
      * Creates a transparent DOM overlay on top of the canvas.
      * When selection mode is active and Ctrl/Cmd is held, the overlay
      * captures pointer events before they reach BlueMap's canvas,
-     * preventing heatmap ShapeMarkers from intercepting selection clicks.
-     *
-     * Previous approaches (document-level capture-phase stopImmediatePropagation
-     * on pointerup/click) failed because BlueMap uses internal Three.js raycasting
-     * that bypasses DOM event propagation entirely.
+     * giving us control over chunk selection click handling.
      */
     function createOverlay() {
         const canvas = app.mapViewer.renderer.domElement;
@@ -901,8 +922,37 @@
     let spacerEl = null;
 
     function createUI() {
+        createHeatmapToggle();
         createToggleButton();
         createPanel();
+    }
+
+    function createHeatmapToggle() {
+        heatmapBtn = document.createElement("div");
+        heatmapBtn.className = "svg-button";
+        heatmapBtn.title = "Toggle Heatmap";
+        // Thermometer icon
+        heatmapBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
+        </svg>`;
+
+        heatmapBtn.addEventListener("click", toggleHeatmap);
+
+        // Insert into control bar
+        const cb = document.querySelector(".control-bar");
+        if (cb) {
+            const ref = [...cb.children].find(
+                (el) => el.className === "space thin-hide greedy"
+            );
+            if (ref) {
+                spacerEl = document.createElement("div");
+                spacerEl.className = "space thin-hide";
+                ref.parentNode.insertBefore(spacerEl, ref);
+                ref.parentNode.insertBefore(heatmapBtn, ref);
+            } else {
+                cb.appendChild(heatmapBtn);
+            }
+        }
     }
 
     function createToggleButton() {
@@ -931,20 +981,12 @@
             }
         });
 
-        // Insert into control bar
-        const cb = document.querySelector(".control-bar");
-        if (cb) {
-            const ref = [...cb.children].find(
-                (el) => el.className === "space thin-hide greedy"
-            );
-            if (ref) {
-                spacerEl = document.createElement("div");
-                spacerEl.className = "space thin-hide";
-                ref.parentNode.insertBefore(spacerEl, ref);
-                ref.parentNode.insertBefore(toggleBtn, ref);
-            } else {
-                cb.appendChild(toggleBtn);
-            }
+        // Insert into control bar next to heatmap button
+        if (heatmapBtn && heatmapBtn.parentNode) {
+            heatmapBtn.parentNode.insertBefore(toggleBtn, heatmapBtn.nextSibling);
+        } else {
+            const cb = document.querySelector(".control-bar");
+            if (cb) cb.appendChild(toggleBtn);
         }
     }
 

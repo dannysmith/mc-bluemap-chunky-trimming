@@ -2,7 +2,6 @@ package dev.danny.chunktrimmer;
 
 import de.bluecolored.bluemap.api.BlueMapAPI;
 import de.bluecolored.bluemap.api.BlueMapWorld;
-import dev.danny.chunktrimmer.overlay.OverlayManager;
 import dev.danny.chunktrimmer.scanner.ChunkAnalysis;
 import dev.danny.chunktrimmer.scanner.ChunkScanner;
 import dev.danny.chunktrimmer.scanner.ScanCache;
@@ -40,7 +39,6 @@ public class ChunkTrimmerAddon implements Runnable {
 
         Config config = Config.load(configDir);
         ScanCache cache = new ScanCache(configDir);
-        OverlayManager overlays = new OverlayManager(config.getOverlayY());
         DataExporter exporter = new DataExporter();
 
         // Install web addon (JS/CSS)
@@ -54,7 +52,6 @@ public class ChunkTrimmerAddon implements Runnable {
                 for (Map.Entry<BlueMapWorld, ScanResult> entry : cached.entrySet()) {
                     logScanSummary(entry.getKey().getId(), entry.getValue());
                 }
-                overlays.update(api, cached);
                 exporter.export(api, cached);
             }
         }
@@ -105,7 +102,6 @@ public class ChunkTrimmerAddon implements Runnable {
                 long elapsed = System.currentTimeMillis() - startTime;
                 System.out.println("[ChunkTrimmer] Background scan complete in " + elapsed + "ms");
 
-                overlays.update(api, results);
                 exporter.export(api, results);
 
             } catch (IOException e) {
